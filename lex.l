@@ -27,9 +27,21 @@
 [a-zA-Z_][a-zA-Z0-9_]* {
 	Symbol *sym;
 
+	/* if name isn't found, it is installed with the type UNDEF */
 	if ((sym = lookup(yytext)) == NULL)
 		sym = install(yytext, UNDEF, 0.0, NULL);
+
 	yylval.sym = sym;
+
+	/*
+	 * Even if the name is installed as UNDEF,  the returned type is
+	 * a VAR; because the test for whether a variable is defined has
+	 * to be in the grammar, not in the lexical analyzer.     When a
+	 * VAR is recognized lexically, its context is yet not known; we
+	 * don't want a complaint that `x` is undefined when the context
+	 * is a legal one  (such as the left side of an assignment, like
+	 * `x=1`).
+	 */
 	return sym->type == UNDEF ? VAR : sym->type;
 }
 

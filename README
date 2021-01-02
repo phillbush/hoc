@@ -7,6 +7,18 @@ and preparing stuff to make it into a stage-6 hoc.
 Hoc is an interpreter for a simple language used for floating point
 arithmetic with C-like syntax.
 
+Hoc compiles input into a stack machine.   As input is parsed, code
+is generated for a simple computer instead of immediately computing
+answers. Once the end of a statement is reached, the generated code
+is executed (interpreted) to compute the desired result. The simple
+computer is a ‘stack machine’: when an operand is encountered, it's
+pushed onto a stack  (more precisely,  code is generated to push it
+onto a stack).  Stack machines usually result in simple interpreters
+(it's just an array containing operators and operands).  The operators
+are the machine instructions; each is a function call with its
+arguments, if any, following the instruction.
+
+
 § FILES
 
 • README:       This file.
@@ -45,6 +57,8 @@ shell with history support.
 • Make the sizes of `stack` and `prog` dynamic, so hoc never runs out of
   space if memory can be obtained by calling malloc(3) (exercise 8-10).
 • Add support for `break` and `continue` (exercise 8-14).
+• Add support for reading from multiple files.
+• Add option -e to read code from command-line.
 
 
 § FEATURES
@@ -107,8 +121,73 @@ Exercise 8-17 will not be implemented.  If you want editing features use
 a shell wrapper such as rlwrap(1).
 
 
+§ HOW IT WORKS
+
+Before parsing and execution begins, the symbol table is populated.
+Calls to the function install() installs both keywords and built-in
+functions in the symbol table.
+
+The main loop initiates the stack machine (by cleaning the stack and the
+program memory) and parses the input, one statement at a time, until the
+end of the input file.  While the input is parsed, code is generated for
+later execution by calls to the function `code()`,  which simply puts an
+`Inst` data  (see bellow)  into the next free spot in the program memory
+(pointed by `progp`).  Once a statement is parsed, the generated code is
+printed (if DEBUG is set) and executed.
+
+For example, to handle the assignment `x = 2 * y`, the following code
+is generated.  When this code is executed, the expression is evaluated
+and the result is stored in x.  The final `pop` clears the value off
+the stack because it is not needed any longer.
+
+	OPERATION: constpush    Push a constant onto stack
+	VALUE:     2            … the constant 2
+
+	OPERATION: varpush      Push symbol table pointer onto stack
+	SYMBOL:    y            … for the variable y
+	OPERATION: eval         Evaluate (replace pointer by value)
+
+	OPERATION: mul          Multiply top two items; product replaces them
+
+	OPERATION: varpush      Push symbol table pointer onto stack
+	SYMBOL:    x            … for the variable x
+	OPERATION: assign       Store value in variable, pop pointer
+
+	OPERATION: pop          Clear top value from stack
+	OPERATION: STOP         End of instruction sequence
+
+The machine itself is a list of entries of data of type `Inst`.   An
+`Inst` is a union of stuff that can go into the memory; such as pointer
+to routines like `mul` that perform an arithmetic operation; or pointer
+to a entry in the symbol table; or a floating point number (for constant
+values); or a pointer to another entry in the machine (used by control
+flow statements, for example).
+
+Execution of the machine is simple.  Each cycle calls `execute()`,
+which executes the function pointed to by the instruction pointed
+to by the program counter `pc`, and increments `pc` so it's ready
+for the next instruction.  An NULL instruction terminates the loop.
+Some instructions also increment `pc` to step over any arguments
+that follows the instruction.
+
+The code generated for while and if needs particular study.  When the
+keyword `while`is encountered, the operation whilecode() is generated,
+and its position in the machine is returned as the value of the while
+production. At the same time, however, the two following positions in
+the machine are also reserved, to be filled in later.   The next code
+generated is the expression that makes up the condition part of the
+`while`.  After the whole `while` statement has been recognized, the
+two extra positions reserved after the `whilecode` instruction are
+filled with pointers to the locations of the loop body and the statement
+that follows the loop.  Code generated for `if` works similar.
+
+You can compile with -DDEBUG=1 for hoc to print the generated machine
+code after it is generated.
+
+
 § SEE ALSO
 
 The UNIX Programming Environment,
 by Brian W. Kernighan and Rob Pike,
 Prentice Hall, 1984.
+ISBN: 0-13-937681-X.

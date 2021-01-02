@@ -34,6 +34,7 @@ static struct {
 	{NULL,      0},
 };
 
+/* show usage */
 static void
 usage(void)
 {
@@ -41,6 +42,7 @@ usage(void)
 	exit(1);
 }
 
+/* catch floating point exceptions */
 static void
 sigfpehand(int sig)
 {
@@ -48,12 +50,13 @@ sigfpehand(int sig)
 	yyerror("floating point exception");
 }
 
+/* hoc */
 int
 main(int argc, char *argv[])
 {
 	struct sigaction sa;
-	size_t i;
 	FILE *fp = NULL;
+	size_t i;
 
 	if (argc > 2 || (argc == 2 && argv[1][0] == '-' && argv[1][1]))
 		usage();
@@ -65,6 +68,7 @@ main(int argc, char *argv[])
 	if (sigaction(SIGFPE, &sa, NULL) == -1)
 		err(1, "sigaction");
 
+	/* open input file */
 	if (argc == 2 && strcmp(argv[1], "-") != 0)
 		if ((fp = fopen(argv[1], "r")) == NULL)
 			err(1, "%s", argv[1]);
@@ -77,7 +81,7 @@ main(int argc, char *argv[])
 	for (i = 0; bltins[i].s; i++)
 		install(bltins[i].s, BLTIN, 0.0, bltins[i].f);
 
-	/* parse and execute input */
+	/* parse and execute input until EOF */
 	setjmp(begin);
 	while (initcode(), yyparse()) {
 		if (DEBUG)
@@ -85,7 +89,7 @@ main(int argc, char *argv[])
 		execute(prog);
 	}
 
-	/* close file and clear symbol table */
+	/* close input file and clear symbol table */
 	if (fp)
 		fclose(fp);
 	cleansym();

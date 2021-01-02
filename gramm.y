@@ -13,6 +13,21 @@
 #define valcode(v) code((Inst){.type = VAL, .u.val = (v)})
 #define oprcode(o) code((Inst){.type = OPR, .u.opr = (o)})
 #define symcode(s) code((Inst){.type = SYM, .u.sym = (s)})
+#define fill2(x, a, b) \
+	(x)[1].type = (x)[2].type = IP, \
+	(x)[1].u.ip = (a), \
+	(x)[2].u.ip = (b)
+#define fill3(x, a, b, c) \
+	(x)[1].type = (x)[2].type = (x)[3].type = IP, \
+	(x)[1].u.ip = (a), \
+	(x)[2].u.ip = (b), \
+	(x)[3].u.ip = (c)
+#define fill4(x, a, b, c, d) \
+	(x)[1].type = (x)[2].type = (x)[3].type = (x)[4].type = IP, \
+	(x)[1].u.ip = (a), \
+	(x)[2].u.ip = (b), \
+	(x)[3].u.ip = (c), \
+	(x)[4].u.ip = (d)
 
 int yylex(void);
 %}
@@ -59,6 +74,47 @@ asgn:
 	| VAR MODEQ expr        { $$ = $3; oprcode(sympush); symcode($1); oprcode(modeq); }
 	;
 
+stmt:
+	  '{' stmtlist '}'                      { $$ = $2; }
+	| expr                                  { oprcode(oprpop); }
+	| PRINT expr                            { oprcode(prexpr); $$ = $2; }
+	| while cond stmt end                   { fill2($1, $3, $4); }
+	| if cond stmt end                      { fill3($1, $3, NULL, $4); }
+	| if cond stmt end ELSE stmt end        { fill3($1, $3, $6, $7); }
+	| forloop '(' forcond ';' forcond ';' forcond ')' stmt end { fill4($1, $5, $7, $9, $10); }
+	// | ';'           { $$ = oprcode(NULL); }         /* null statement */
+	;
+
+expr:
+	  NUMBER                   { $$ = oprcode(constpush); valcode($1); }
+	| PREVIOUS                 { $$ = oprcode(constpush); valcode(prev); }
+	| VAR                      { $$ = oprcode(sympush); symcode($1); oprcode(eval); }
+	| expr '+' expr            { oprcode(add); }
+	| expr '-' expr            { oprcode(sub); }
+	| expr '*' expr            { oprcode(mul); }
+	| expr '/' expr            { oprcode(divd); }
+	| expr '%' expr            { oprcode(mod); }
+	| expr '^' expr            { oprcode(power); }
+	| expr GT expr             { oprcode(gt); }
+	| expr GE expr             { oprcode(ge); }
+	| expr LT expr             { oprcode(lt); }
+	| expr LE expr             { oprcode(le); }
+	| expr EQ expr             { oprcode(eq); }
+	| expr NE expr             { oprcode(ne); }
+	| NOT expr                 { $$ = $2; oprcode(not); }
+	| INC VAR                  { $$ = oprcode(preinc); symcode($2); }
+	| DEC VAR                  { $$ = oprcode(predec); symcode($2); }
+	| VAR INC                  { $$ = oprcode(postinc); symcode($1); }
+	| VAR DEC                  { $$ = oprcode(postdec); symcode($1); }
+	| expr and expr end        { fill2($2, $3, $4); }
+	| expr or expr end         { fill2($2, $3, $4); }
+	| BLTIN '(' arglist ')'    { $$ = $3; oprcode(bltin); funcode($1->u.fun); }
+	| '-' expr %prec UNARYSIGN { $$ = $2; oprcode(negate); }
+	| '+' expr %prec UNARYSIGN { $$ = $2; }
+	| '(' expr ')'             { $$ = $2; }
+	| asgn
+	;
+
 args:
 	  expr                  { $$ = oprcode(argalloc);  }
 	| args ',' expr         { $$ = oprcode(argadd); }
@@ -67,33 +123,6 @@ args:
 arglist:
 	  /* nothing */         { $$ = oprcode(argnull); }
 	| args;
-	;
-
-stmt:
-	  expr          { oprcode(oprpop); }
-	| PRINT expr    { oprcode(prexpr); $$ = $2; }
-	| forloop '(' forcond ';' forcond ';' forcond ')' stmt end {
-		($1)[1].type = ($1)[2].type = ($1)[3].type = ($1)[4].type = IP;
-		($1)[1].u.ip = $5;      /* condition */
-		($1)[2].u.ip = $7;      /* post loop */
-		($1)[3].u.ip = $9;      /* body of loop */
-		($1)[4].u.ip = $10; }   /* end, if cond fails */
-	| while cond stmt end {
-		($1)[1].type = ($1)[2].type = IP;
-		($1)[1].u.ip = $3;     /* body of loop */
-		($1)[2].u.ip = $4; }   /* end, if cond fails */
-	| if cond stmt end {
-		($1)[1].type = ($1)[2].type = ($1)[3].type = IP;
-		($1)[1].u.ip = $3;     /* thenpart */
-		($1)[2].u.ip = NULL;   /* elsepart */
-		($1)[3].u.ip = $4; }   /* end, if cond fails */
-	| if cond stmt end ELSE stmt end {
-		($1)[1].type = ($1)[2].type = ($1)[3].type = IP;
-		($1)[1].u.ip = $3;     /* thenpart */
-		($1)[2].u.ip = $6;     /* elsepart */
-		($1)[3].u.ip = $7; }   /* end, if cond fails */
-	| '{' stmtlist '}'      { $$ = $2; }
-	// | ';'           { $$ = oprcode(NULL); }         /* null statement */
 	;
 
 forcond:
@@ -128,48 +157,12 @@ term:
 	| '\n'
 	;
 
-expr:
-	  NUMBER        { $$ = oprcode(constpush); valcode($1); }
-	| PREVIOUS      { $$ = oprcode(constpush); valcode(prev); }
-	| VAR           { $$ = oprcode(sympush); symcode($1); oprcode(eval); }
-	| expr '+' expr { oprcode(add); }
-	| expr '-' expr { oprcode(sub); }
-	| expr '*' expr { oprcode(mul); }
-	| expr '/' expr { oprcode(divd); }
-	| expr '%' expr { oprcode(mod); }
-	| expr '^' expr { oprcode(power); }
-	| expr GT expr  { oprcode(gt); }
-	| expr GE expr  { oprcode(ge); }
-	| expr LT expr  { oprcode(lt); }
-	| expr LE expr  { oprcode(le); }
-	| expr EQ expr  { oprcode(eq); }
-	| expr NE expr  { oprcode(ne); }
-	| NOT expr      { $$ = $2; oprcode(not); }
-	| INC VAR       { $$ = oprcode(preinc); symcode($2); }
-	| DEC VAR       { $$ = oprcode(predec); symcode($2); }
-	| VAR INC       { $$ = oprcode(postinc); symcode($1); }
-	| VAR DEC       { $$ = oprcode(postdec); symcode($1); }
-	| expr and expr end     {
-		($2)[1].type = ($2)[2].type = IP;
-		($2)[1].u.ip = $3;              /* right expression */
-		($2)[2].u.ip = $4; }            /* end */
-	| expr or expr end      {
-		($2)[1].type = ($2)[2].type = IP;
-		($2)[1].u.ip = $3;              /* right expression */
-		($2)[2].u.ip = $4; }            /* end */
-	| BLTIN '(' arglist ')'         { $$ = $3; oprcode(bltin); funcode($1->u.fun); }
-	| '-' expr %prec UNARYSIGN      { $$ = $2; oprcode(negate); }
-	| '+' expr %prec UNARYSIGN      { $$ = $2; }
-	| '(' expr ')'                  { $$ = $2; }
-	| asgn
-	;
-
 and:
-	  AND                   { $$ = oprcode(and); oprcode(NULL); oprcode(NULL); }
+	  AND   { $$ = oprcode(and); oprcode(NULL); oprcode(NULL); }
 	;
 
 or:
-	  OR                    { $$ = oprcode(or); oprcode(NULL); oprcode(NULL); }
+	  OR    { $$ = oprcode(or); oprcode(NULL); oprcode(NULL); }
 	;
 
 end:

@@ -1,5 +1,7 @@
 #include <stddef.h>
 
+enum Insttype {VAL, SYM, OPR, FUN, IP};
+
 typedef struct Arg {
 	size_t narg;
 	size_t max;
@@ -23,8 +25,6 @@ typedef union Datum {
 	Symbol *sym;
 	Arg *arg;
 } Datum;
-
-enum Insttype {VAL, SYM, OPR, FUN, IP};
 
 /* machine instruction */
 typedef struct Inst {
