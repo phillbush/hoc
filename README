@@ -35,6 +35,7 @@ shell with history support.
 § TODO
 
 • Implement a full stage-6 hoc.
+• Write the manual.
 • Add the built-in rand(), which returns a floating point random
   variable uniformly distributed on the interval (0,1) (exercise 8-6).
 • Add a facility to execute system commands from within hoc (and assign
