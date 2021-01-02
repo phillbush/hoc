@@ -1,0 +1,52 @@
+                                  hoc:
+                         High-Order Calculator
+
+This is an implementation of a stage-5 hoc(1).  I'm still doing changes
+and preparing stuff to make it into a stage-6 hoc.
+
+Hoc is an interpreter for a simple language used for floating point
+arithmetic with C-like syntax.
+
+§ FILES
+
+• README:       This file.
+• Makefile:     The makefile.
+• args.[hc]:    Routines for allocating and freeing argument lists.
+• bltin.[hc]:   Routines for built-in functions.
+• code.[hc]:    Routines for executing the machine instructions.
+• error.[hc]:   Routines for error printing.
+• symbol.[hc]:  Routines for handling the symbol table.
+• main.c:       The main routine.
+• hoc.h:        The common types and definitions.
+• lex.l:        The lexical analyzer.
+• gramm.y:      The grammar.
+
+
+§ USAGE
+
+	$ hoc [file]
+
+Hoc read the file given as argument and interpret it.  If no file is
+given, or if file is “-”, hoc interprets the standard input; in this
+case, I recommend running hoc with rlwrap(1), for a better interactive
+shell with history support.
+
+
+§ TODO
+
+• Do some exercises.
+• Implement a full stage-6 hoc.
+
+
+§ DIFFERENCES
+
+This hoc implementation differs from the one presented in the book.
+
+TODO: List the differences (for loops, etc).
+
+
+§ SEE ALSO
+
+The UNIX Programming Environment,
+by Brian W. Kernighan and Rob Pike,
+Prentice Hall, 1984.
