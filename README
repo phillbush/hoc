@@ -34,15 +34,76 @@ shell with history support.
 
 § TODO
 
-• Do some exercises.
 • Implement a full stage-6 hoc.
+• Add the built-in rand(), which returns a floating point random
+  variable uniformly distributed on the interval (0,1) (exercise 8-6).
+• Add a facility to execute system commands from within hoc (and assign
+  their output to variables) (exercise 8-7).
+• Revise the code in bltin.c to use a table instead of a set of
+  essentially identical functions (exercise 8-8).
+• Make the sizes of `stack` and `prog` dynamic, so hoc never runs out of
+  space if memory can be obtained by calling malloc(3) (exercise 8-10).
+• Add support for `break` and `continue` (exercise 8-14).
 
 
-§ DIFFERENCES
+§ FEATURES
 
-This hoc implementation differs from the one presented in the book.
+Exercise 8-2 (modulus and unary +).
+This version of hoc(1) supports the modulus operator (%) and the unary
+plus operator (+).
 
-TODO: List the differences (for loops, etc).
+Exercise 8-3 (printed value).
+The previously printed value can be accessed using the special variable
+`.` (period).
+
+Exercise 8-4 (semicolon).
+This version of hoc(1) supports both semicolon and newlines as statement
+separators.  (See the `term` production rule on gramm.y).
+
+Exercise 8-5 (prohibit assignment to constants).
+In this version of hoc(1), constants such as pi are implemented as
+nullary built-in functions.  So, instead of using `PI`, you must use
+`pi()`.  Since built-in functions cannot be assigned, this prohibit
+assignment to constants.
+
+Exercise 8-6 (n-ary functions).
+This version of hoc(1) uses a argument-list structure for functions.  When
+a function is read from the input, it allocates a new argument-list
+structure and fill it with the arguments of the function.  This
+structure contains both the number of arguments an the arguments itself.
+(See arg.c and the `args` and `arglist` production rule on gramm.y).
+
+Exercise 8-9 (lex).
+This implementation uses lex(1) for implementing the lexical analyzer.
+
+Exercise 8-12 (debug).
+By compiling with -DDEBUG=1, the machine instructions hoc generates are
+printed in a readable form for debugging.
+
+Exercise 8-13 (assignment operators, short-circuit).
+This version of hoc(1) supports the assignment operators of C, such as
++=, *=, etc, and the increment and decrement operators ++ and --.   It
+also supports short-circuit evaluation of the && and || operators,  so
+they guarantee left-to-right evaluation and early termination, as in C.
+
+Exercise 8-14 (for loops).
+This version of hoc(1) support for loops.  Each element of the for loop
+(pre-loop; condition; post-loop) can be omitted, as in C.  An omitted
+condition implies in an infinite loop.
+
+Exercise 8-15 (comments).
+This version of hoc(1) supports comments beginnign with “#”.
+
+
+§ NON-FEATURES
+
+Exercise 8-11 will not be implemented.  It requires using a switch on
+the type operation instead of calling functions from a function pointer.
+Using function pointer is more elegant and easier to maintain than using
+switch cases.
+
+Exercise 8-17 will not be implemented.  If you want editing features use
+a shell wrapper such as rlwrap(1).
 
 
 § SEE ALSO
