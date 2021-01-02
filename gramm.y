@@ -41,8 +41,8 @@ int yylex(void);
 
 %token <val>  NUMBER PREVIOUS
 %token <sym>  VAR BLTIN UNDEF PRINT WHILE IF ELSE FOR
-%type  <inst> stmt asgn expr stmtlist cond while if end args arglist and
-%type  <inst> or forcond forloop
+%type  <inst> args arglist expr exprlist stmt stmtlist asgn cond
+%type  <inst> and or while if forcond forloop end
 %left  ','
 %right '=' ADDEQ SUBEQ MULEQ DIVEQ MODEQ
 %left  OR
@@ -61,7 +61,7 @@ list:
 	| list term
 	| list stmt term        { oprcode(NULL); return 1; }
 	| list asgn term        { oprcode(oprpop); oprcode(NULL); return 1; }
-	| list expr term        { oprcode(print); oprcode(NULL); return 1; }
+	| list exprlist term    { oprcode(print); oprcode(NULL); return 1; }
 	| list error term       { yyerrok; }
 	;
 
@@ -76,14 +76,18 @@ asgn:
 
 stmt:
 	  '{' stmtlist '}'                      { $$ = $2; }
-	| expr                                  { oprcode(oprpop); }
-	| PRINT expr                            { oprcode(prexpr); $$ = $2; }
+	| exprlist                              { oprcode(oprpop); }
+	| PRINT exprlist                        { oprcode(prexpr); $$ = $2; }
 	| while cond stmt end                   { fill2($1, $3, $4); }
 	| if cond stmt end                      { fill3($1, $3, NULL, $4); }
 	| if cond stmt end ELSE stmt end        { fill3($1, $3, $6, $7); }
 	| forloop '(' forcond ';' forcond ';' forcond ')' stmt end { fill4($1, $5, $7, $9, $10); }
 	// | ';'           { $$ = oprcode(NULL); }         /* null statement */
 	;
+
+exprlist:
+	  expr
+	| exprlist ',' expr
 
 expr:
 	  NUMBER                   { $$ = oprcode(constpush); valcode($1); }
@@ -111,7 +115,7 @@ expr:
 	| BLTIN '(' arglist ')'    { $$ = $3; oprcode(bltin); funcode($1->u.fun); }
 	| '-' expr %prec UNARYSIGN { $$ = $2; oprcode(negate); }
 	| '+' expr %prec UNARYSIGN { $$ = $2; }
-	| '(' expr ')'             { $$ = $2; }
+	| '(' exprlist ')'         { $$ = $2; }
 	| asgn
 	;
 
@@ -122,16 +126,16 @@ args:
 
 arglist:
 	  /* nothing */         { $$ = oprcode(argnull); }
-	| args;
+	| args
 	;
 
 forcond:
 	  /* nothing */ { oprcode(NULL); }
-	| expr          { oprcode(NULL); }
+	| exprlist      { oprcode(NULL); }
 	;
 
 cond:
-	  '(' expr ')'  { oprcode(NULL); $$ = $2; }
+	  '(' exprlist ')'  { oprcode(NULL); $$ = $2; }
 	;
 
 if:
