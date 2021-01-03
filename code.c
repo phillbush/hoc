@@ -22,12 +22,14 @@ static struct {
 	char *s;
 	int v;
 } keywords[] = {
-	{"if",      IF},
-	{"else",    ELSE},
-	{"while",   WHILE},
-	{"print",   PRINT},
-	{"for",     FOR},
-	{NULL,      0},
+	{"if",          IF},
+	{"else",        ELSE},
+	{"while",       WHILE},
+	{"print",       PRINT},
+	{"for",         FOR},
+	{"break",       BREAK},
+	{"continue",    CONTINUE},
+	{NULL,          0}
 };
 
 /* operations */
@@ -111,6 +113,9 @@ Inst *pc;                       /* program counter during execution */
 /* Frame */
 // TODO
 
+/* conditions */
+static int breaking, continuing;
+
 double prev = 0;
 
 /* install names into symbol table */
@@ -178,6 +183,7 @@ code(Inst inst)
 void
 initcode(void)
 {
+	continuing = breaking = 0;
 	stackp = stack;
 	progp = prog;
 }
@@ -234,7 +240,7 @@ execute(Inst *p)
 	Inst *opc;
 
 	pc = p;
-	while (pc->u.opr) {
+	while (pc->u.opr && !breaking && !continuing) {
 		opc = pc++;
 		opc->u.opr();
 	}
@@ -652,8 +658,15 @@ cond(Inst *pc)
 static Datum
 execpop(Inst *pc)
 {
-	execute(pc);
-	return pop();
+	Datum d;
+
+	if (pc && pc->u.opr) {
+		execute(pc);
+		d = pop();
+	} else {
+		d.val = 0.0;
+	}
+	return d;
 }
 
 void
@@ -677,8 +690,17 @@ whilecode(void)
 	Inst *savepc;
 
 	savepc = pc;
-	while (cond(savepc + 2))
+	while (cond(savepc + 2)) {
 		execute(savepc->u.ip);
+		if (continuing) {
+			continuing = 0;
+			continue;
+		}
+		if (breaking) {
+			breaking = 0;
+			break;
+		}
+	}
 	pc = (savepc + 1)->u.ip;
 }
 
@@ -688,9 +710,30 @@ forcode(void)
 	Inst *savepc;
 
 	savepc = pc;
-	for (execpop(savepc + 4); cond(savepc->u.ip); execpop((savepc + 1)->u.ip))
+	for (execpop(savepc + 4); cond(savepc->u.ip); execpop((savepc + 1)->u.ip)) {
 		execute((savepc + 2)->u.ip);
+		if (continuing) {
+			continuing = 0;
+			continue;
+		}
+		if (breaking) {
+			breaking = 0;
+			break;
+		}
+	}
 	pc = (savepc + 3)->u.ip;
+}
+
+void
+breakcode(void)
+{
+	breaking = 1;
+}
+
+void
+continuecode(void)
+{
+	continuing = 1;
 }
 
 /* get random from 0 to 1 */

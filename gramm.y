@@ -38,7 +38,7 @@ int yylex(void);
 }
 
 %token <val>  NUMBER PREVIOUS
-%token <sym>  VAR BLTIN UNDEF PRINT WHILE IF ELSE FOR
+%token <sym>  VAR BLTIN UNDEF PRINT WHILE IF ELSE FOR BREAK CONTINUE
 %type  <narg> args arglist
 %type  <inst> expr exprlist stmt stmtlist asgn
 %type  <inst> and or while if cond forcond forloop begin end
@@ -75,12 +75,14 @@ asgn:
 
 stmt:
 	  '{' stmtlist '}'                      { $$ = $2; }
+	| BREAK                                 { looponly($1->name); oprcode(breakcode); }
+	| CONTINUE                              { looponly($1->name); oprcode(continuecode); }
 	| exprlist                              { oprcode(oprpop); }
 	| PRINT exprlist                        { oprcode(prexpr); $$ = $2; }
-	| while cond stmt end                   { fill2($1, $3, $4); }
 	| if cond stmt end                      { fill3($1, $3, NULL, $4); }
 	| if cond stmt end ELSE stmt end        { fill3($1, $3, $6, $7); }
-	| forloop '(' forcond ';' forcond ';' forcond ')' stmt end { fill4($1, $5, $7, $9, $10); }
+	| while cond stmt end                   { fill2($1, $3, $4); inloop = 0; }
+	| forloop '(' forcond ';' forcond ';' forcond ')' stmt end { fill4($1, $5, $7, $9, $10); inloop = 0; }
 	// | ';'           { $$ = oprcode(NULL); }         /* null statement */
 	;
 
@@ -142,11 +144,11 @@ if:
 	;
 
 while:
-	  WHILE { $$ = oprcode(whilecode); oprcode(NULL); oprcode(NULL); }
+	  WHILE { $$ = oprcode(whilecode); oprcode(NULL); oprcode(NULL); inloop = 1; }
 	;
 
 forloop:
-	  FOR   { $$ = oprcode(forcode); oprcode(NULL); oprcode(NULL); oprcode(NULL); oprcode(NULL); }
+	  FOR   { $$ = oprcode(forcode); oprcode(NULL); oprcode(NULL); oprcode(NULL); oprcode(NULL); inloop = 1; }
 	;
 
 stmtlist:
@@ -177,3 +179,13 @@ end:
 	;
 
 %%
+
+static int inloop = 0;
+
+/* error if using break/continue out of loop */
+static void
+looponly(const char *s)
+{
+	if (!inloop)
+		yyerror("%s: used outside loop", s);
+}

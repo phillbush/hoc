@@ -52,7 +52,6 @@ shell with history support.
   their output to variables) (exercise 8-7).
 • Make the sizes of `stack` and `prog` dynamic, so hoc never runs out of
   space if memory can be obtained by calling malloc(3) (exercise 8-10).
-• Add support for `break` and `continue` (exercise 8-14).
 • Add support for reading from multiple files.
 • Add option -e to read code from command-line.
 
@@ -100,9 +99,10 @@ also supports short-circuit evaluation of the && and || operators,  so
 they guarantee left-to-right evaluation and early termination, as in C.
 
 Exercise 8-14 (for loops).
-This version of hoc(1) support for loops.  Each element of the for loop
-(pre-loop; condition; post-loop) can be omitted, as in C.  An omitted
-condition implies in an infinite loop.
+This version of hoc(1) supports for loops, and break and continue
+statements.  Each element of the for loop (pre-loop; condition;
+post-loop) can be omitted, as in C.  An omitted condition implies
+in an infinite loop.
 
 Exercise 8-15 (comments).
 This version of hoc(1) supports comments beginnign with “#”.

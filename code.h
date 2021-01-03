@@ -47,4 +47,6 @@ void not(void);
 void ifcode(void);
 void whilecode(void);
 void forcode(void);
+void breakcode(void);
+void continuecode(void);
 void bltin(void);
