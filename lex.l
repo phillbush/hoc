@@ -2,7 +2,7 @@
 #include <stddef.h>
 #include "hoc.h"
 #include "symbol.h"
-#include "y.tab.h"
+#include "gramm.h"
 %}
 
 %option nounput

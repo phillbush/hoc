@@ -14,14 +14,15 @@ LDFLAGS = ${LDLIBS}
 all: ${PROG}
 
 ${OBJS}: hoc.h error.h
-main.o: code.h symbol.h bltin.h y.tab.h
+main.o: code.h symbol.h bltin.h gramm.h
 gramm.o: code.h args.h symbol.h
-code.o: code.h bltin.h args.h
+code.o: code.h bltin.h args.h gramm.h
 args.o: args.h
-lex.o: symbol.h y.tab.h
+lex.o: symbol.h gramm.h
 bltin.o: bltin.h
 symbol.o:
 error.o:
+gramm.h: gramm.c
 
 ${PROG}: ${OBJS}
 	${CC} -o $@ ${OBJS} ${LDFLAGS}
@@ -29,14 +30,13 @@ ${PROG}: ${OBJS}
 .c.o:
 	${CC} ${CFLAGS} ${CPPFLAGS} -c $<
 
-gramm.c y.tab.h: gramm.y
-	${YACC} ${YFLAGS} gramm.y
-	mv y.tab.c gramm.c
+gramm.c: gramm.y
+	${YACC} -o $@ ${YFLAGS} gramm.y
 
 lex.c: lex.l
 	${LEX} ${LFLAGS} -o lex.c lex.l
 
 clean:
-	-rm ${PROG} y.* *.o gramm.c lex.c
+	-rm ${PROG} *.o gramm.[hc] lex.c
 
 .PHONY: all clean

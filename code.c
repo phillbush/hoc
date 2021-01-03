@@ -5,7 +5,7 @@
 #include "error.h"
 #include "code.h"
 #include "bltin.h"
-#include "y.tab.h"
+#include "gramm.h"
 
 #ifndef DEBUG
 #define DEBUG 0

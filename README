@@ -109,6 +109,11 @@ condition implies in an infinite loop.
 Exercise 8-15 (comments).
 This version of hoc(1) supports comments beginnign with “#”.
 
+Expression list.
+This version of hoc(1) supports list of expressions separated by comma,
+for example in the for condition `for (i = 0, j = 1; i < 3; i++, j++)`.
+The value of a expression list is that of the rightmost expression.
+
 
 § NON-FEATURES
 

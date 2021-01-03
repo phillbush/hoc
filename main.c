@@ -10,7 +10,7 @@
 #include "error.h"
 #include "symbol.h"
 #include "bltin.h"
-#include "y.tab.h"
+#include "gramm.h"
 
 #ifndef DEBUG
 #define DEBUG 0
