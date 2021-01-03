@@ -5,11 +5,9 @@
 #include <math.h>
 #include "hoc.h"
 #include "code.h"
-#include "args.h"
-#include "symbol.h"
 #include "error.h"
 
-#define funcode(f) code((Inst){.type = FUN, .u.fun = (f)})
+#define argcode(a) code((Inst){.type = NARG, .u.narg = (a)})
 #define valcode(v) code((Inst){.type = VAL, .u.val = (v)})
 #define oprcode(o) code((Inst){.type = OPR, .u.opr = (o)})
 #define symcode(s) code((Inst){.type = SYM, .u.sym = (s)})
@@ -33,7 +31,7 @@ int yylex(void);
 %}
 
 %union {
-	Arg *arg;
+	int narg;
 	Symbol *sym;
 	double val;
 	Inst *inst;
@@ -41,8 +39,9 @@ int yylex(void);
 
 %token <val>  NUMBER PREVIOUS
 %token <sym>  VAR BLTIN UNDEF PRINT WHILE IF ELSE FOR
-%type  <inst> args arglist expr exprlist stmt stmtlist asgn cond
-%type  <inst> and or while if forcond forloop end
+%type  <narg> args arglist
+%type  <inst> expr exprlist stmt stmtlist asgn
+%type  <inst> and or while if cond forcond forloop begin end
 %left  ','
 %right '=' ADDEQ SUBEQ MULEQ DIVEQ MODEQ
 %left  OR
@@ -90,42 +89,42 @@ exprlist:
 	| exprlist ',' expr
 
 expr:
-	  NUMBER                   { $$ = oprcode(constpush); valcode($1); }
-	| PREVIOUS                 { $$ = oprcode(constpush); valcode(prev); }
-	| VAR                      { $$ = oprcode(sympush); symcode($1); oprcode(eval); }
-	| expr '+' expr            { oprcode(add); }
-	| expr '-' expr            { oprcode(sub); }
-	| expr '*' expr            { oprcode(mul); }
-	| expr '/' expr            { oprcode(divd); }
-	| expr '%' expr            { oprcode(mod); }
-	| expr '^' expr            { oprcode(power); }
-	| expr GT expr             { oprcode(gt); }
-	| expr GE expr             { oprcode(ge); }
-	| expr LT expr             { oprcode(lt); }
-	| expr LE expr             { oprcode(le); }
-	| expr EQ expr             { oprcode(eq); }
-	| expr NE expr             { oprcode(ne); }
-	| NOT expr                 { $$ = $2; oprcode(not); }
-	| INC VAR                  { $$ = oprcode(preinc); symcode($2); }
-	| DEC VAR                  { $$ = oprcode(predec); symcode($2); }
-	| VAR INC                  { $$ = oprcode(postinc); symcode($1); }
-	| VAR DEC                  { $$ = oprcode(postdec); symcode($1); }
-	| expr and expr end        { fill2($2, $3, $4); }
-	| expr or expr end         { fill2($2, $3, $4); }
-	| BLTIN '(' arglist ')'    { $$ = $3; oprcode(bltin); funcode($1->u.fun); }
-	| '-' expr %prec UNARYSIGN { $$ = $2; oprcode(negate); }
-	| '+' expr %prec UNARYSIGN { $$ = $2; }
-	| '(' exprlist ')'         { $$ = $2; }
+	  NUMBER                        { $$ = oprcode(constpush); valcode($1); }
+	| PREVIOUS                      { $$ = oprcode(constpush); valcode(prev); }
+	| VAR                           { $$ = oprcode(sympush); symcode($1); oprcode(eval); }
+	| expr '+' expr                 { oprcode(add); }
+	| expr '-' expr                 { oprcode(sub); }
+	| expr '*' expr                 { oprcode(mul); }
+	| expr '/' expr                 { oprcode(divd); }
+	| expr '%' expr                 { oprcode(mod); }
+	| expr '^' expr                 { oprcode(power); }
+	| expr GT expr                  { oprcode(gt); }
+	| expr GE expr                  { oprcode(ge); }
+	| expr LT expr                  { oprcode(lt); }
+	| expr LE expr                  { oprcode(le); }
+	| expr EQ expr                  { oprcode(eq); }
+	| expr NE expr                  { oprcode(ne); }
+	| NOT expr                      { $$ = $2; oprcode(not); }
+	| INC VAR                       { $$ = oprcode(preinc); symcode($2); }
+	| DEC VAR                       { $$ = oprcode(predec); symcode($2); }
+	| VAR INC                       { $$ = oprcode(postinc); symcode($1); }
+	| VAR DEC                       { $$ = oprcode(postdec); symcode($1); }
+	| expr and expr end             { fill2($2, $3, $4); }
+	| expr or expr end              { fill2($2, $3, $4); }
+	| '-' expr %prec UNARYSIGN      { $$ = $2; oprcode(negate); }
+	| '+' expr %prec UNARYSIGN      { $$ = $2; }
+	| '(' exprlist ')'              { $$ = $2; }
+	| BLTIN begin '(' arglist ')'   { $$ = $2; oprcode(bltin); symcode($1); argcode($4); }
 	| asgn
 	;
 
 args:
-	  expr                  { $$ = oprcode(argalloc);  }
-	| args ',' expr         { $$ = oprcode(argadd); }
+	  expr                  { $$ = 1;  }
+	| args ',' expr         { $$ = $1 + 1; }
 	;
 
 arglist:
-	  /* nothing */         { $$ = oprcode(argnull); }
+	  /* nothing */         { $$ = 0; }
 	| args
 	;
 
@@ -167,6 +166,10 @@ and:
 
 or:
 	  OR    { $$ = oprcode(or); oprcode(NULL); oprcode(NULL); }
+	;
+
+begin:
+	  /* nothing */         { $$ = progp; }
 	;
 
 end:

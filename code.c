@@ -1,20 +1,33 @@
+#include <errno.h>
 #include <stdio.h>
+#include <string.h>
 #include <math.h>
 #include "hoc.h"
-#include "args.h"
-#include "error.h"
 #include "code.h"
-#include "bltin.h"
+#include "symbol.h"
+#include "error.h"
 #include "gramm.h"
-
-#ifndef DEBUG
-#define DEBUG 0
-#endif
 
 #define NSTACK 256
 #define NPROG  2000
 
+/* function declaration, needed for bltins[] */
+static double Integer(double);
+
 /* keywords */
+static struct {
+	char *s;
+	int v;
+} keywords[] = {
+	{"if",      IF},
+	{"else",    ELSE},
+	{"while",   WHILE},
+	{"print",   PRINT},
+	{"for",     FOR},
+	{NULL,      0},
+};
+
+/* operations */
 static struct {
 	char *s;
 	void (*f)(void);
@@ -35,9 +48,6 @@ static struct {
 	{"diveq",     diveq},
 	{"modeq",     modeq},
 	{"bltin",     bltin},
-	{"argnull",   argnull},
-	{"argalloc",  argalloc},
-	{"argadd",    argadd},
 	{"sympush",   sympush},
 	{"constpush", constpush},
 	{"print",     print},
@@ -56,14 +66,59 @@ static struct {
 	{NULL,        NULL},
 };
 
+/* bltins */
+static struct {
+	char *s;
+	int n;
+	union {
+		double f0;
+		double (*f1)(double);
+		double (*f2)(double, double);
+	} u;
+} bltins[] = {
+	{"pi",      0,  .u.f0 = M_PI},
+	{"e",       0,  .u.f0 = M_E},
+	{"gamma",   0,  .u.f0 = 0.57721566490153286060},
+	{"deg",     0,  .u.f0 = 57.29577951308232087680},
+	{"phi",     0,  .u.f0 = 1.61803398874989484820},
+	{"int",     1,  .u.f1 = Integer},
+	{"abs",     1,  .u.f1 = fabs},
+	{"atan",    1,  .u.f1 = atan},
+	{"cos",     1,  .u.f1 = cos},
+	{"exp",     1,  .u.f1 = exp},
+	{"log",     1,  .u.f1 = log},
+	{"log10",   1,  .u.f1 = log10},
+	{"sin",     1,  .u.f1 = sin},
+	{"sqrt",    1,  .u.f1 = sqrt},
+	{"atan2",   2,  .u.f2 = atan2},
+	{NULL,      0,  .u.f0 = 0.0}
+};
+
+/* Stack */
 static Datum stack[NSTACK];     /* the stack */
 static Datum *stackp;           /* the free spot on stack */
 
+/* Machine */
 Inst prog[NPROG];               /* the machine */
 Inst *progp;                    /* next free spot for code generation */
 Inst *pc;                       /* program counter during execution */
 
+/* Frame */
+// TODO
+
 double prev = 0;
+
+/* install names into symbol table */
+void
+initsymtab(void)
+{
+	int i;
+
+	for (i = 0; keywords[i].s; i++)
+		install(keywords[i].s, keywords[i].v, 0.0);
+	for (i = 0; bltins[i].s; i++)
+		install(bltins[i].s, BLTIN, 0.0);
+}
 
 /* push d onto stack */
 static void
@@ -125,23 +180,11 @@ initcode(void)
 char *
 oprname(void (*opr)(void))
 {
-	size_t i;
+	int i;
 
 	for (i = 0; oprs[i].f; i++)
 		if (opr == oprs[i].f)
 			return oprs[i].s;
-	return "unknown";
-}
-
-/* return pointer to built-in name */
-char *
-funname(double (*fun)(Arg *))
-{
-	size_t i;
-
-	for (i = 0; bltins[i].f; i++)
-		if (fun == bltins[i].f)
-			return bltins[i].s;
 	return "unknown";
 }
 
@@ -155,17 +198,17 @@ debug(void)
 	for (n = 0, p = prog; p < progp; n++, p++) {
 		fprintf(stderr, "%03zu: ", n);
 		switch (p->type) {
+		case NARG:
+			fprintf(stderr, "NARG %d", p->u.narg);
+			break;
 		case VAL:
-			fprintf(stderr, "VAL %.8g", p->u.val);
+			fprintf(stderr, "VAL  %.8g", p->u.val);
 			break;
 		case SYM:
-			fprintf(stderr, "SYM %s", p->u.sym->name);
+			fprintf(stderr, "SYM  %s", p->u.sym->name);
 			break;
 		case OPR:
-			fprintf(stderr, "OPR %s", oprname(p->u.opr));
-			break;
-		case FUN:
-			fprintf(stderr, "FUN %s", funname(p->u.fun));
+			fprintf(stderr, "OPR  %s", oprname(p->u.opr));
 			break;
 		case IP:
 			if (p->u.ip == NULL)
@@ -196,39 +239,6 @@ void
 oprpop(void)
 {
 	pop();
-}
-
-/* push null argument list onto stack */
-void
-argnull(void)
-{
-	Datum d;
-
-	d.arg = NULL;
-	push(d);
-}
-
-/* allocate new argument list onto stack */
-void
-argalloc(void)
-{
-	Datum d;
-
-	d = pop();
-	d.arg = eallocargs(d.val);
-	push(d);
-}
-
-/* allocate new argument list onto stack */
-void
-argadd(void)
-{
-	Datum d1, d2;
-
-	d2 = pop();
-	d1 = pop();
-	d1.arg = addarg(d1.arg, d2.val);
-	push(d1);
 }
 
 /* push constant onto stack */
@@ -346,7 +356,7 @@ eval(void)
 
 	d = pop();
 	verifyeval(d.sym);
-	d.val = d.sym->u.val;
+	d.val = d.sym->val;
 	push(d);
 }
 
@@ -358,7 +368,7 @@ preinc(void)
 
 	d.sym = (*pc++).u.sym;
 	verifyeval(d.sym);
-	d.val = d.sym->u.val += 1.0;
+	d.val = d.sym->val += 1.0;
 	push(d);
 }
 
@@ -370,7 +380,7 @@ predec(void)
 
 	d.sym = (*pc++).u.sym;
 	verifyeval(d.sym);
-	d.val = d.sym->u.val -= 1.0;
+	d.val = d.sym->val -= 1.0;
 	push(d);
 }
 
@@ -383,8 +393,8 @@ postinc(void)
 
 	d.sym = (*pc++).u.sym;
 	verifyeval(d.sym);
-	v = d.sym->u.val;
-	d.sym->u.val += 1.0;
+	v = d.sym->val;
+	d.sym->val += 1.0;
 	d.val = v;
 	push(d);
 }
@@ -398,8 +408,8 @@ postdec(void)
 
 	d.sym = (*pc++).u.sym;
 	verifyeval(d.sym);
-	v = d.sym->u.val;
-	d.sym->u.val -= 1.0;
+	v = d.sym->val;
+	d.sym->val -= 1.0;
 	d.val = v;
 	push(d);
 }
@@ -413,7 +423,7 @@ assign(void)
 	d1 = pop();
 	d2 = pop();
 	verifyassign(d1.sym);
-	d1.sym->u.val = d2.val;
+	d1.sym->val = d2.val;
 	d1.sym->type = VAR;
 	push(d2);
 }
@@ -427,7 +437,7 @@ addeq(void)
 	d1 = pop();
 	d2 = pop();
 	verifyassign(d1.sym);
-	d2.val = d1.sym->u.val += d2.val;
+	d2.val = d1.sym->val += d2.val;
 	d1.sym->type = VAR;
 	push(d2);
 }
@@ -441,7 +451,7 @@ subeq(void)
 	d1 = pop();
 	d2 = pop();
 	verifyassign(d1.sym);
-	d2.val = d1.sym->u.val -= d2.val;
+	d2.val = d1.sym->val -= d2.val;
 	d1.sym->type = VAR;
 	push(d2);
 }
@@ -455,7 +465,7 @@ muleq(void)
 	d1 = pop();
 	d2 = pop();
 	verifyassign(d1.sym);
-	d2.val = d1.sym->u.val *= d2.val;
+	d2.val = d1.sym->val *= d2.val;
 	d1.sym->type = VAR;
 	push(d2);
 }
@@ -469,7 +479,7 @@ diveq(void)
 	d1 = pop();
 	d2 = pop();
 	verifyassign(d1.sym);
-	d2.val = d1.sym->u.val /= d2.val;
+	d2.val = d1.sym->val /= d2.val;
 	d1.sym->type = VAR;
 	push(d2);
 }
@@ -484,9 +494,9 @@ modeq(void)
 	d1 = pop();
 	d2 = pop();
 	verifyassign(d1.sym);
-	n = d1.sym->u.val;
+	n = d1.sym->val;
 	n %= (long)d2.val;
-	d2.val = d1.sym->u.val = n;
+	d2.val = d1.sym->val = n;
 	d1.sym->type = VAR;
 	push(d2);
 }
@@ -500,20 +510,6 @@ print(void)
 	d = pop();
 	printf("\t%.8g\n", d.val);
 	prev = d.val;
-}
-
-/* evaluate built-in on top of stack */
-void
-bltin(void)
-{
-	Datum d;
-	double n;
-
-	d = pop();
-	n = (*pc++).u.fun(d.arg);
-	delargs(d.arg);
-	d.val = n;
-	push(d);
 }
 
 void
@@ -689,4 +685,60 @@ forcode(void)
 	for (execpop(savepc + 4); cond(savepc->u.ip); execpop((savepc + 1)->u.ip))
 		execute((savepc + 2)->u.ip);
 	pc = (savepc + 3)->u.ip;
+}
+
+/* get integer part of double */
+static double
+Integer(double n)
+{
+	return (double)(long)n;
+}
+
+/* check result of library call */
+static double
+errcheck(double d, const char *s)
+{
+	if (errno == EDOM) {
+		errno = 0;
+		yyerror("%s: argument out of domain", s);
+	}
+	if (errno == ERANGE) {
+		errno = 0;
+		yyerror("%s: result out of range", s);
+	}
+	return d;
+}
+
+/* evaluate built-in on top of stack */
+void
+bltin(void)
+{
+	Datum d1, d2;
+	Symbol *sym;
+	int narg, i;
+
+	sym = (pc++)->u.sym;
+	narg = (pc++)->u.narg;
+	for (i = 0; bltins[i].s; i++)
+		if (strcmp(sym->name, bltins[i].s) == 0)
+			break;
+	if (narg != bltins[i].n)
+		yyerror("%s: wrong arity", bltins[i].s);
+	errno = 0;
+	switch (narg) {
+	case 0:
+		d1.val = bltins[i].u.f0;
+		break;
+	case 1:
+		d1 = pop();
+		d1.val = (*bltins[i].u.f1)(d1.val);
+		break;
+	case 2:
+		d2 = pop();
+		d1 = pop();
+		d1.val = (*bltins[i].u.f2)(d1.val, d2.val);
+		break;
+	}
+	d1.val = errcheck(d1.val, bltins[i].s);
+	push(d1);
 }

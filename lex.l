@@ -29,7 +29,7 @@
 
 	/* if name isn't found, it is installed with the type UNDEF */
 	if ((sym = lookup(yytext)) == NULL)
-		sym = install(yytext, UNDEF, 0.0, NULL);
+		sym = install(yytext, UNDEF, 0.0);
 
 	yylval.sym = sym;
 

@@ -1,4 +1,5 @@
 #include <err.h>
+#include <errno.h>
 #include <setjmp.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -17,5 +18,6 @@ yyerror(const char *fmt, ...)
 	(void)vsnprintf(buf, sizeof buf - 1, fmt, ap);
 	warnx("line %d: %s", yylineno, buf);
 	va_end(ap);
+	errno = 0;
 	longjmp(begin, 1);
 }

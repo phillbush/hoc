@@ -9,30 +9,12 @@
 #include "code.h"
 #include "error.h"
 #include "symbol.h"
-#include "bltin.h"
 #include "gramm.h"
-
-#ifndef DEBUG
-#define DEBUG 0
-#endif
 
 extern FILE *yyin;
 jmp_buf begin;
 
 int yyparse(void);
-
-/* keywords */
-static struct {
-	char *s;
-	int v;
-} keywords[] = {
-	{"if",      IF},
-	{"else",    ELSE},
-	{"while",   WHILE},
-	{"print",   PRINT},
-	{"for",     FOR},
-	{NULL,      0},
-};
 
 /* show usage */
 static void
@@ -56,7 +38,6 @@ main(int argc, char *argv[])
 {
 	struct sigaction sa;
 	FILE *fp = NULL;
-	size_t i;
 
 	if (argc > 2 || (argc == 2 && argv[1][0] == '-' && argv[1][1]))
 		usage();
@@ -76,10 +57,7 @@ main(int argc, char *argv[])
 		yyin = fp;
 
 	/* install keywords and bultin functions */
-	for (i = 0; keywords[i].s; i++)
-		install(keywords[i].s, keywords[i].v, 0.0, NULL);
-	for (i = 0; bltins[i].s; i++)
-		install(bltins[i].s, BLTIN, 0.0, bltins[i].f);
+	initsymtab();
 
 	/* parse and execute input until EOF */
 	setjmp(begin);

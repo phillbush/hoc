@@ -1,29 +1,23 @@
 #include <stddef.h>
 
-enum Insttype {VAL, SYM, OPR, FUN, IP};
+#ifndef DEBUG
+#define DEBUG 0
+#endif
 
-typedef struct Arg {
-	size_t narg;
-	size_t max;
-	double *a;
-} Arg;
+enum Insttype {VAL, SYM, OPR, IP, NARG};
 
 /* symbol table entry */
 typedef struct Symbol {
 	struct Symbol *next;
 	char *name;
 	int type;
-	union {
-		double val;
-		double (*fun)(Arg *);
-	} u;
+	double val;
 } Symbol;
 
 /* interpreter stack type */
 typedef union Datum {
 	double val;
 	Symbol *sym;
-	Arg *arg;
 } Datum;
 
 /* machine instruction */
@@ -33,7 +27,7 @@ typedef struct Inst {
 		double val;
 		Symbol *sym;
 		void (*opr)(void);
-		double (*fun)(Arg *);
 		struct Inst *ip;
+		int narg;
 	} u;
 } Inst;

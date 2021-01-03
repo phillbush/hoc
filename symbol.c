@@ -39,17 +39,14 @@ lookup(const char *s)
 
 /* install s in symbol table */
 Symbol *
-install(const char *s, int t, double d, double (*f)(Arg *))
+install(const char *s, int t, double d)
 {
 	Symbol *sym;
 
 	sym = emalloc(sizeof *sym);
 	sym->name = estrdup(s);
 	sym->type = t;
-	if (f)
-		sym->u.fun = f;
-	else
-		sym->u.val = d;
+	sym->val = d;
 	sym->next = symlist;
 	symlist = sym;
 	return sym;

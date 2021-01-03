@@ -52,8 +52,6 @@ shell with history support.
   variable uniformly distributed on the interval (0,1) (exercise 8-6).
 • Add a facility to execute system commands from within hoc (and assign
   their output to variables) (exercise 8-7).
-• Revise the code in bltin.c to use a table instead of a set of
-  essentially identical functions (exercise 8-8).
 • Make the sizes of `stack` and `prog` dynamic, so hoc never runs out of
   space if memory can be obtained by calling malloc(3) (exercise 8-10).
 • Add support for `break` and `continue` (exercise 8-14).
@@ -82,14 +80,14 @@ nullary built-in functions.  So, instead of using `PI`, you must use
 assignment to constants.
 
 Exercise 8-6 (n-ary functions).
-This version of hoc(1) uses a argument-list structure for functions.  When
-a function is read from the input, it allocates a new argument-list
-structure and fill it with the arguments of the function.  This
-structure contains both the number of arguments an the arguments itself.
-(See arg.c and the `args` and `arglist` production rule on gramm.y).
+This version of hoc(1) support built-in functions with variable arity.
+
+Exercise 8-8 (table of built-in functions).
+This version of hoc(1) uses a table instead of a set of essentially
+identical functions for implementing the built-in functions.
 
 Exercise 8-9 (lex).
-This implementation uses lex(1) for implementing the lexical analyzer.
+This version of hoc(1) uses lex(1) for implementing the lexical analyzer.
 
 Exercise 8-12 (debug).
 By compiling with -DDEBUG=1, the machine instructions hoc generates are

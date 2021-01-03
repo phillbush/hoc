@@ -8,6 +8,7 @@ Inst *code(Inst inst);
 
 void execute(Inst *);
 
+void initsymtab(void);
 void initcode(void);
 
 /* instruction operation functions */
@@ -30,10 +31,6 @@ void preinc(void);
 void predec(void);
 void postinc(void);
 void postdec(void);
-void bltin(void);
-void argnull(void);
-void argalloc(void);
-void argadd(void);
 void sympush(void);
 void constpush(void);
 void print(void);
@@ -50,3 +47,4 @@ void not(void);
 void ifcode(void);
 void whilecode(void);
 void forcode(void);
+void bltin(void);
