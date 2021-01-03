@@ -635,22 +635,6 @@ or(void)
 	pc = (savepc + 1)->u.ip;
 }
 
-void
-ifcode(void)
-{
-	Datum d;
-	Inst *savepc;
-
-	savepc = pc;                            /* then part */
-	execute(savepc + 3);
-	d = pop();
-	if (d.val)
-		execute(savepc->u.ip);
-	else if ((savepc + 1)->u.ip)            /* else part? */
-		execute((savepc + 1)->u.ip);
-	pc = (savepc + 2)->u.ip;                /* next statement */
-}
-
 static double
 cond(Inst *pc)
 {
@@ -663,11 +647,26 @@ cond(Inst *pc)
 	return d.val;
 }
 
-static void
+static Datum
 execpop(Inst *pc)
 {
 	execute(pc);
-	pop();
+	return pop();
+}
+
+void
+ifcode(void)
+{
+	Datum d;
+	Inst *savepc;
+
+	savepc = pc;                            /* then part */
+	d = execpop(savepc + 3);
+	if (d.val)
+		execute(savepc->u.ip);
+	else if ((savepc + 1)->u.ip)            /* else part? */
+		execute((savepc + 1)->u.ip);
+	pc = (savepc + 2)->u.ip;                /* next statement */
 }
 
 void
