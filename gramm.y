@@ -56,7 +56,7 @@ int yylex(void);
 %%
 
 list:
-	  /* nothing */
+	  /* nothing */         { inloop = 0; }
 	| list term
 	| list stmt term        { oprcode(NULL); return 1; }
 	| list asgn term        { oprcode(oprpop); oprcode(NULL); return 1; }
@@ -81,8 +81,8 @@ stmt:
 	| PRINT exprlist                        { oprcode(prexpr); $$ = $2; }
 	| if cond stmt end                      { fill3($1, $3, NULL, $4); }
 	| if cond stmt end ELSE stmt end        { fill3($1, $3, $6, $7); }
-	| while cond stmt end                   { fill2($1, $3, $4); inloop = 0; }
-	| forloop '(' forcond ';' forcond ';' forcond ')' stmt end { fill4($1, $5, $7, $9, $10); inloop = 0; }
+	| while cond stmt end                   { fill2($1, $3, $4); inloop--; }
+	| forloop '(' forcond ';' forcond ';' forcond ')' stmt end { fill4($1, $5, $7, $9, $10); inloop--; }
 	// | ';'           { $$ = oprcode(NULL); }         /* null statement */
 	;
 
@@ -144,11 +144,11 @@ if:
 	;
 
 while:
-	  WHILE { $$ = oprcode(whilecode); oprcode(NULL); oprcode(NULL); inloop = 1; }
+	  WHILE { $$ = oprcode(whilecode); oprcode(NULL); oprcode(NULL); inloop++; }
 	;
 
 forloop:
-	  FOR   { $$ = oprcode(forcode); oprcode(NULL); oprcode(NULL); oprcode(NULL); oprcode(NULL); inloop = 1; }
+	  FOR   { $$ = oprcode(forcode); oprcode(NULL); oprcode(NULL); oprcode(NULL); oprcode(NULL); inloop++; }
 	;
 
 stmtlist:
@@ -180,12 +180,12 @@ end:
 
 %%
 
-static int inloop = 0;
+size_t inloop;
 
 /* error if using break/continue out of loop */
 static void
 looponly(const char *s)
 {
 	if (!inloop)
-		yyerror("%s: used outside loop", s);
+		yyerror("%s used outside loop", s);
 }
