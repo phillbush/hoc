@@ -47,8 +47,7 @@ shell with history support.
 • Write the manual.
 • Add a facility to execute system commands from within hoc (and assign
   their output to variables) (exercise 8-7).
-• Make the sizes of `stack` and `prog` dynamic, so hoc never runs out of
-  space if memory can be obtained by calling malloc(3) (exercise 8-10).
+• Turn symbol table into a hash table?
 • Add option -e to read code from command-line.
 
 
@@ -83,6 +82,10 @@ identical functions for implementing the built-in functions.
 
 Exercise 8-9 (lex).
 This version of hoc(1) uses lex(1) for implementing the lexical analyzer.
+
+Exercise 8-10 (dynamic machine).
+The sizes of `stack` and `prog` are dynamic, so hoc never runs out of
+space as memory can be obtained by calling malloc(3).
 
 Exercise 8-12 (debug).
 By compiling with -DDEBUG=1, the machine instructions hoc generates are

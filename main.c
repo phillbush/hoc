@@ -5,10 +5,9 @@
 #include <setjmp.h>
 #include <signal.h>
 #include <unistd.h>
-#include "hoc.h"
-#include "code.h"
 #include "error.h"
 #include "symbol.h"
+#include "code.h"
 #include "gramm.h"
 
 extern FILE *yyin;
@@ -64,7 +63,7 @@ main(int argc, char *argv[])
 	while (initcode(), yyparse()) {
 		if (DEBUG)
 			debug();
-		execute(prog);
+		execute(NULL);
 	}
 
 	/* close input file and clear symbol table */

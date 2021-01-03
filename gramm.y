@@ -3,29 +3,29 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
-#include "hoc.h"
-#include "code.h"
 #include "error.h"
+#include "symbol.h"
+#include "code.h"
 
 #define argcode(a) code((Inst){.type = NARG, .u.narg = (a)})
 #define valcode(v) code((Inst){.type = VAL, .u.val = (v)})
 #define oprcode(o) code((Inst){.type = OPR, .u.opr = (o)})
 #define symcode(s) code((Inst){.type = SYM, .u.sym = (s)})
 #define fill2(x, a, b) \
-	(x)[1].type = (x)[2].type = IP, \
-	(x)[1].u.ip = (a), \
-	(x)[2].u.ip = (b)
+	N1((x))->type = N2((x))->type = IP, \
+	N1((x))->u.ip = (a), \
+	N2((x))->u.ip = (b)
 #define fill3(x, a, b, c) \
-	(x)[1].type = (x)[2].type = (x)[3].type = IP, \
-	(x)[1].u.ip = (a), \
-	(x)[2].u.ip = (b), \
-	(x)[3].u.ip = (c)
+	N1((x))->type = N2((x))->type = N3((x))->type = IP, \
+	N1((x))->u.ip = (a), \
+	N2((x))->u.ip = (b), \
+	N3((x))->u.ip = (c)
 #define fill4(x, a, b, c, d) \
-	(x)[1].type = (x)[2].type = (x)[3].type = (x)[4].type = IP, \
-	(x)[1].u.ip = (a), \
-	(x)[2].u.ip = (b), \
-	(x)[3].u.ip = (c), \
-	(x)[4].u.ip = (d)
+	N1((x))->type = N2((x))->type = N3((x))->type = N4((x))->type = IP, \
+	N1((x))->u.ip = (a), \
+	N2((x))->u.ip = (b), \
+	N3((x))->u.ip = (c), \
+	N4((x))->u.ip = (d)
 
 int yylex(void);
 %}
@@ -152,7 +152,7 @@ forloop:
 	;
 
 stmtlist:
-	  /* nothing */ { $$ = progp; }
+	  /* nothing */ { $$ = getprogp(); }
 	| stmtlist term
 	| stmtlist stmt
 	;
@@ -171,16 +171,16 @@ or:
 	;
 
 begin:
-	  /* nothing */         { $$ = progp; }
+	  /* nothing */         { $$ = getprogp(); }
 	;
 
 end:
-	  /* nothing */         { oprcode(NULL); $$ = progp; }
+	  /* nothing */         { oprcode(NULL); $$ = getprogp(); }
 	;
 
 %%
 
-size_t inloop;
+static size_t inloop;
 
 /* error if using break/continue out of loop */
 static void

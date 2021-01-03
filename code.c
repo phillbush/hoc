@@ -1,17 +1,14 @@
+#include <err.h>
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
 #include <time.h>
-#include "hoc.h"
-#include "code.h"
-#include "symbol.h"
 #include "error.h"
+#include "symbol.h"
+#include "code.h"
 #include "gramm.h"
-
-#define NSTACK 256
-#define NPROG  2000
 
 /* function declaration, needed for bltins[] */
 static double Random(void);
@@ -101,95 +98,27 @@ static struct {
 	{NULL,      0,  .u.d  = 0.0}
 };
 
-/* Stack */
-static Datum stack[NSTACK];     /* the stack */
-static Datum *stackp;           /* the free spot on stack */
+/* datum stack */
+static Datum *stack = NULL;
 
-/* Machine */
-Inst prog[NPROG];               /* the machine */
-Inst *progp;                    /* next free spot for code generation */
-Inst *pc;                       /* program counter during execution */
+/* program queue */
+static struct {
+	Inst *head;
+	Inst *tail;
+	Inst *progp;
+	Inst *pc;
+} prog = {NULL, NULL, NULL, NULL};
 
 /* Frame */
 // TODO
 
-/* conditions */
+/* flags */
 static int breaking, continuing;
 
 double prev = 0;
 
-/* install names into symbol table */
-void
-init(void)
-{
-	int i;
-
-	srand(time(NULL));
-	for (i = 0; keywords[i].s; i++)
-		install(keywords[i].s, keywords[i].v, 0.0);
-	for (i = 0; bltins[i].s; i++)
-		install(bltins[i].s, BLTIN, 0.0);
-}
-
-/* push d onto stack */
-static void
-push(Datum d)
-{
-	if (stackp >= &stack[NSTACK])
-		yyerror("stack overflow");
-	*stackp++ = d;
-}
-
-/* pop and return top element from stack */
-static Datum
-pop(void)
-{
-	if (stackp <= stack)
-		yyerror("stack underflow");
-	return *--stackp;
-}
-
-static void
-verifyassign(Symbol *s)
-{
-	if (s->type != VAR && s->type != UNDEF)
-		yyerror("assignment to non-variable: %s", s->name);
-}
-
-/* verify whether symbol is valid variable for evaluation */
-static void
-verifyeval(Symbol *s)
-{
-	if (s->type != VAR && s->type != UNDEF)
-		yyerror("attempt to evaluate non-variable: %s", s->name);
-	if (s->type == UNDEF)
-		yyerror("undefined variable: %s", s->name);
-}
-
-/* install one instruction or operand */
-Inst *
-code(Inst inst)
-{
-	Inst *oprogp;
-
-	oprogp = progp;
-	if (progp >= &prog[NPROG])
-		yyerror("program too big");
-	*progp++ = inst;
-	return oprogp;
-}
-
-/* initialize for code generation */
-void
-initcode(void)
-{
-	continuing = breaking = 0;
-	stackp = stack;
-	progp = prog;
-}
-
 /* return pointer to operation name */
-char *
+static char *
 oprname(void (*opr)(void))
 {
 	int i;
@@ -200,6 +129,32 @@ oprname(void (*opr)(void))
 	return "unknown";
 }
 
+/* initiate machine */
+void
+init(void)
+{
+	int i;
+
+	if ((prog.head = malloc(sizeof *prog.head)) == NULL)
+		err(1, "malloc");
+	prog.head->next = NULL;
+	prog.progp = prog.head;
+	srand(time(NULL));
+	for (i = 0; keywords[i].s; i++)
+		install(keywords[i].s, keywords[i].v, 0.0);
+	for (i = 0; bltins[i].s; i++)
+		install(bltins[i].s, BLTIN, 0.0);
+}
+
+/* initialize for code generation */
+void
+initcode(void)
+{
+	continuing = breaking = 0;
+	prog.tail = NULL;
+	prog.progp = prog.head;
+}
+
 /* debug the machine */
 void
 debug(void)
@@ -207,7 +162,7 @@ debug(void)
 	Inst *p;
 	size_t n;
 
-	for (n = 0, p = prog; p < progp; n++, p++) {
+	for (n = 0, p = prog.head; p; n++, p = p->next) {
 		fprintf(stderr, "%03zu: ", n);
 		switch (p->type) {
 		case NARG:
@@ -235,22 +190,81 @@ debug(void)
 
 /* run the machine */
 void
-execute(Inst *p)
+execute(Inst *ip)
 {
 	Inst *opc;
 
-	pc = p;
-	while (pc->u.opr && !breaking && !continuing) {
-		opc = pc++;
+	if (ip == NULL)
+		prog.pc = prog.head;
+	else
+		prog.pc = ip;
+	while (prog.pc->u.opr && !breaking && !continuing) {
+		opc = prog.pc;
+		prog.pc = prog.pc->next;
 		opc->u.opr();
 	}
+}
+
+/* install one instruction or operand */
+Inst *
+code(Inst inst)
+{
+	Inst *ip;
+
+	ip = prog.progp->next;
+	prog.tail = prog.progp;
+	*prog.tail = inst;
+	prog.tail->next = ip;
+	if (!prog.tail->next) {
+		if ((ip = malloc(sizeof *ip)) == NULL)
+			yyerror("out of memory");
+		ip->next = NULL;
+		prog.tail->next = ip;
+	}
+	prog.progp = prog.tail->next;
+	return prog.tail;
+}
+
+/* get prog.progp */
+Inst *
+getprogp(void)
+{
+	return prog.progp;
+}
+
+/* push d onto stack */
+static void
+push(Datum d)
+{
+	Datum *p;
+
+	if ((p = malloc(sizeof *p)) == NULL)
+		yyerror("out of memory");
+	*p = d;
+	p->next = stack;
+	stack = p;
+}
+
+/* pop and return top element from stack */
+static Datum
+pop(void)
+{
+	Datum *tmp, d;
+
+	if (stack == NULL)
+		yyerror("stack underflow");
+	tmp = stack;
+	d = *stack;
+	stack = stack->next;
+	free(tmp);
+	return d;
 }
 
 /* pop and return top element from stack */
 void
 oprpop(void)
 {
-	pop();
+	(void)pop();
 }
 
 /* push constant onto stack */
@@ -259,7 +273,8 @@ constpush(void)
 {
 	Datum d;
 
-	d.val = (*pc++).u.val;
+	d.u.val = prog.pc->u.val;
+	prog.pc = prog.pc->next;
 	push(d);
 }
 
@@ -269,7 +284,8 @@ sympush(void)
 {
 	Datum d;
 
-	d.sym = (*pc++).u.sym;
+	d.u.sym = prog.pc->u.sym;
+	prog.pc = prog.pc->next;
 	push(d);
 }
 
@@ -281,7 +297,7 @@ add(void)
 
 	d2 = pop();
 	d1 = pop();
-	d1.val += d2.val;
+	d1.u.val += d2.u.val;
 	push(d1);
 }
 
@@ -293,7 +309,7 @@ sub(void)
 
 	d2 = pop();
 	d1 = pop();
-	d1.val -= d2.val;
+	d1.u.val -= d2.u.val;
 	push(d1);
 }
 
@@ -305,7 +321,7 @@ mul(void)
 
 	d2 = pop();
 	d1 = pop();
-	d1.val *= d2.val;
+	d1.u.val *= d2.u.val;
 	push(d1);
 }
 
@@ -316,10 +332,10 @@ divd(void)
 	Datum d1, d2;
 
 	d2 = pop();
-	if (d2.val == 0.0)
+	if (d2.u.val == 0.0)
 		yyerror("division by zero");
 	d1 = pop();
-	d1.val /= d2.val;
+	d1.u.val /= d2.u.val;
 	push(d1);
 }
 
@@ -330,10 +346,10 @@ mod(void)
 	Datum d1, d2;
 
 	d2 = pop();
-	if (d2.val == 0.0)
+	if (d2.u.val == 0.0)
 		yyerror("module by zero");
 	d1 = pop();
-	d1.val = fmod(d1.val, d2.val);
+	d1.u.val = fmod(d1.u.val, d2.u.val);
 	push(d1);
 }
 
@@ -344,7 +360,7 @@ negate(void)
 	Datum d;
 
 	d = pop();
-	d.val = -d.val;
+	d.u.val = -d.u.val;
 	push(d);
 }
 
@@ -356,8 +372,18 @@ power(void)
 
 	d2 = pop();
 	d1 = pop();
-	d1.val = pow(d1.val, d2.val);
+	d1.u.val = pow(d1.u.val, d2.u.val);
 	push(d1);
+}
+
+/* verify whether symbol is valid variable for evaluation */
+static void
+verifyeval(Symbol *s)
+{
+	if (s->type != VAR && s->type != UNDEF)
+		yyerror("attempt to evaluate non-variable: %s", s->name);
+	if (s->type == UNDEF)
+		yyerror("undefined variable: %s", s->name);
 }
 
 /* evaluate variable on stack */
@@ -367,8 +393,8 @@ eval(void)
 	Datum d;
 
 	d = pop();
-	verifyeval(d.sym);
-	d.val = d.sym->val;
+	verifyeval(d.u.sym);
+	d.u.val = d.u.sym->val;
 	push(d);
 }
 
@@ -378,9 +404,10 @@ preinc(void)
 {
 	Datum d;
 
-	d.sym = (*pc++).u.sym;
-	verifyeval(d.sym);
-	d.val = d.sym->val += 1.0;
+	d.u.sym = prog.pc->u.sym;
+	prog.pc = prog.pc->next;
+	verifyeval(d.u.sym);
+	d.u.val = d.u.sym->val += 1.0;
 	push(d);
 }
 
@@ -390,9 +417,10 @@ predec(void)
 {
 	Datum d;
 
-	d.sym = (*pc++).u.sym;
-	verifyeval(d.sym);
-	d.val = d.sym->val -= 1.0;
+	d.u.sym = prog.pc->u.sym;
+	prog.pc = prog.pc->next;
+	verifyeval(d.u.sym);
+	d.u.val = d.u.sym->val -= 1.0;
 	push(d);
 }
 
@@ -403,11 +431,12 @@ postinc(void)
 	Datum d;
 	double v;
 
-	d.sym = (*pc++).u.sym;
-	verifyeval(d.sym);
-	v = d.sym->val;
-	d.sym->val += 1.0;
-	d.val = v;
+	d.u.sym = prog.pc->u.sym;
+	prog.pc = prog.pc->next;
+	verifyeval(d.u.sym);
+	v = d.u.sym->val;
+	d.u.sym->val += 1.0;
+	d.u.val = v;
 	push(d);
 }
 
@@ -418,12 +447,20 @@ postdec(void)
 	Datum d;
 	double v;
 
-	d.sym = (*pc++).u.sym;
-	verifyeval(d.sym);
-	v = d.sym->val;
-	d.sym->val -= 1.0;
-	d.val = v;
+	d.u.sym = prog.pc->u.sym;
+	prog.pc = prog.pc->next;
+	verifyeval(d.u.sym);
+	v = d.u.sym->val;
+	d.u.sym->val -= 1.0;
+	d.u.val = v;
 	push(d);
+}
+
+static void
+verifyassign(Symbol *s)
+{
+	if (s->type != VAR && s->type != UNDEF)
+		yyerror("assignment to non-variable: %s", s->name);
 }
 
 /* assign top value to next value */
@@ -434,9 +471,9 @@ assign(void)
 
 	d1 = pop();
 	d2 = pop();
-	verifyassign(d1.sym);
-	d1.sym->val = d2.val;
-	d1.sym->type = VAR;
+	verifyassign(d1.u.sym);
+	d1.u.sym->val = d2.u.val;
+	d1.u.sym->type = VAR;
 	push(d2);
 }
 
@@ -448,9 +485,9 @@ addeq(void)
 
 	d1 = pop();
 	d2 = pop();
-	verifyassign(d1.sym);
-	d2.val = d1.sym->val += d2.val;
-	d1.sym->type = VAR;
+	verifyassign(d1.u.sym);
+	d2.u.val = d1.u.sym->val += d2.u.val;
+	d1.u.sym->type = VAR;
 	push(d2);
 }
 
@@ -462,9 +499,9 @@ subeq(void)
 
 	d1 = pop();
 	d2 = pop();
-	verifyassign(d1.sym);
-	d2.val = d1.sym->val -= d2.val;
-	d1.sym->type = VAR;
+	verifyassign(d1.u.sym);
+	d2.u.val = d1.u.sym->val -= d2.u.val;
+	d1.u.sym->type = VAR;
 	push(d2);
 }
 
@@ -476,9 +513,9 @@ muleq(void)
 
 	d1 = pop();
 	d2 = pop();
-	verifyassign(d1.sym);
-	d2.val = d1.sym->val *= d2.val;
-	d1.sym->type = VAR;
+	verifyassign(d1.u.sym);
+	d2.u.val = d1.u.sym->val *= d2.u.val;
+	d1.u.sym->type = VAR;
 	push(d2);
 }
 
@@ -490,9 +527,9 @@ diveq(void)
 
 	d1 = pop();
 	d2 = pop();
-	verifyassign(d1.sym);
-	d2.val = d1.sym->val /= d2.val;
-	d1.sym->type = VAR;
+	verifyassign(d1.u.sym);
+	d2.u.val = d1.u.sym->val /= d2.u.val;
+	d1.u.sym->type = VAR;
 	push(d2);
 }
 
@@ -505,11 +542,11 @@ modeq(void)
 
 	d1 = pop();
 	d2 = pop();
-	verifyassign(d1.sym);
-	n = d1.sym->val;
-	n %= (long)d2.val;
-	d2.val = d1.sym->val = n;
-	d1.sym->type = VAR;
+	verifyassign(d1.u.sym);
+	n = d1.u.sym->val;
+	n %= (long)d2.u.val;
+	d2.u.val = d1.u.sym->val = n;
+	d1.u.sym->type = VAR;
 	push(d2);
 }
 
@@ -520,8 +557,8 @@ print(void)
 	Datum d;
 
 	d = pop();
-	printf("\t%.8g\n", d.val);
-	prev = d.val;
+	printf("\t%.8g\n", d.u.val);
+	prev = d.u.val;
 }
 
 void
@@ -530,7 +567,7 @@ prexpr(void)
 	Datum d;
 
 	d = pop();
-	printf("%.8g\n", d.val);
+	printf("%.8g\n", d.u.val);
 }
 
 void
@@ -540,7 +577,7 @@ gt(void)
 
 	d2 = pop();
 	d1 = pop();
-	d1.val = (double)(d1.val > d2.val);
+	d1.u.val = (double)(d1.u.val > d2.u.val);
 	push(d1);
 }
 
@@ -551,7 +588,7 @@ ge(void)
 
 	d2 = pop();
 	d1 = pop();
-	d1.val = (double)(d1.val >= d2.val);
+	d1.u.val = (double)(d1.u.val >= d2.u.val);
 	push(d1);
 }
 
@@ -562,7 +599,7 @@ lt(void)
 
 	d2 = pop();
 	d1 = pop();
-	d1.val = (double)(d1.val < d2.val);
+	d1.u.val = (double)(d1.u.val < d2.u.val);
 	push(d1);
 }
 
@@ -573,7 +610,7 @@ le(void)
 
 	d2 = pop();
 	d1 = pop();
-	d1.val = (double)(d1.val <= d2.val);
+	d1.u.val = (double)(d1.u.val <= d2.u.val);
 	push(d1);
 }
 
@@ -584,7 +621,7 @@ eq(void)
 
 	d2 = pop();
 	d1 = pop();
-	d1.val = (double)(d1.val == d2.val);
+	d1.u.val = (double)(d1.u.val == d2.u.val);
 	push(d1);
 }
 
@@ -595,7 +632,7 @@ ne(void)
 
 	d2 = pop();
 	d1 = pop();
-	d1.val = (double)(d1.val != d2.val);
+	d1.u.val = (double)(d1.u.val != d2.u.val);
 	push(d1);
 }
 
@@ -605,7 +642,7 @@ not(void)
 	Datum d;
 
 	d = pop();
-	d.val = (double)(!d.val);
+	d.u.val = (double)(!d.u.val);
 	push(d);
 }
 
@@ -615,15 +652,15 @@ and(void)
 	Datum d;
 	Inst *savepc;
 
-	savepc = pc;
+	savepc = prog.pc;
 	d = pop();
-	if (d.val) {
+	if (d.u.val) {
 		execute(savepc->u.ip);
 		d = pop();
 	}
-	d.val = d.val ? 1.0 : 0.0;
+	d.u.val = d.u.val ? 1.0 : 0.0;
 	push(d);
-	pc = (savepc + 1)->u.ip;
+	prog.pc = N1(savepc)->u.ip;
 }
 
 void
@@ -632,15 +669,15 @@ or(void)
 	Datum d;
 	Inst *savepc;
 
-	savepc = pc;
+	savepc = prog.pc;
 	d = pop();
-	if (!d.val) {
+	if (!d.u.val) {
 		execute(savepc->u.ip);
 		d = pop();
 	}
-	d.val = d.val ? 1.0 : 0.0;
+	d.u.val = d.u.val ? 1.0 : 0.0;
 	push(d);
-	pc = (savepc + 1)->u.ip;
+	prog.pc = N1(savepc)->u.ip;
 }
 
 static double
@@ -652,7 +689,7 @@ cond(Inst *pc)
 		return 1.0;
 	execute(pc);
 	d = pop();
-	return d.val;
+	return d.u.val;
 }
 
 static Datum
@@ -664,7 +701,7 @@ execpop(Inst *pc)
 		execute(pc);
 		d = pop();
 	} else {
-		d.val = 0.0;
+		d.u.val = 0.0;
 	}
 	return d;
 }
@@ -675,13 +712,13 @@ ifcode(void)
 	Datum d;
 	Inst *savepc;
 
-	savepc = pc;                            /* then part */
-	d = execpop(savepc + 3);
-	if (d.val)
+	savepc = prog.pc;                       /* then part */
+	d = execpop(N3(savepc));
+	if (d.u.val)
 		execute(savepc->u.ip);
-	else if ((savepc + 1)->u.ip)            /* else part? */
-		execute((savepc + 1)->u.ip);
-	pc = (savepc + 2)->u.ip;                /* next statement */
+	else if (N1(savepc)->u.ip)              /* else part? */
+		execute(N1(savepc)->u.ip);
+	prog.pc = N2(savepc)->u.ip;             /* next statement */
 }
 
 void
@@ -689,8 +726,8 @@ whilecode(void)
 {
 	Inst *savepc;
 
-	savepc = pc;
-	while (cond(savepc + 2)) {
+	savepc = prog.pc;
+	while (cond(N2(savepc))) {
 		execute(savepc->u.ip);
 		if (continuing) {
 			continuing = 0;
@@ -701,7 +738,7 @@ whilecode(void)
 			break;
 		}
 	}
-	pc = (savepc + 1)->u.ip;
+	prog.pc = N1(savepc)->u.ip;
 }
 
 void
@@ -709,9 +746,9 @@ forcode(void)
 {
 	Inst *savepc;
 
-	savepc = pc;
-	for (execpop(savepc + 4); cond(savepc->u.ip); execpop((savepc + 1)->u.ip)) {
-		execute((savepc + 2)->u.ip);
+	savepc = prog.pc;
+	for (execpop(N4(savepc)); cond(savepc->u.ip); execpop(N1(savepc)->u.ip)) {
+		execute(N2(savepc)->u.ip);
 		if (continuing) {
 			continuing = 0;
 			continue;
@@ -721,7 +758,7 @@ forcode(void)
 			break;
 		}
 	}
-	pc = (savepc + 3)->u.ip;
+	prog.pc = N3(savepc)->u.ip;
 }
 
 void
@@ -773,31 +810,35 @@ bltin(void)
 	Symbol *sym;
 	int narg, i;
 
-	sym = (pc++)->u.sym;
-	narg = (pc++)->u.narg;
+	sym = prog.pc->u.sym;
+	prog.pc = prog.pc->next;
+	narg = prog.pc->u.narg;
+	prog.pc = prog.pc->next;
 	for (i = 0; bltins[i].s; i++)
 		if (strcmp(sym->name, bltins[i].s) == 0)
 			break;
+	if (narg == 0 && bltins[i].n == -1)
+		narg = -1;
 	if (narg != bltins[i].n)
 		yyerror("%s: wrong arity", bltins[i].s);
 	errno = 0;
 	switch (narg) {
 	case -1:
-		d1.val = bltins[i].u.d;
+		d1.u.val = bltins[i].u.d;
 		break;
 	case 0:
-		d1.val = (*bltins[i].u.f0)();
+		d1.u.val = (*bltins[i].u.f0)();
 		break;
 	case 1:
 		d1 = pop();
-		d1.val = (*bltins[i].u.f1)(d1.val);
+		d1.u.val = (*bltins[i].u.f1)(d1.u.val);
 		break;
 	case 2:
 		d2 = pop();
 		d1 = pop();
-		d1.val = (*bltins[i].u.f2)(d1.val, d2.val);
+		d1.u.val = (*bltins[i].u.f2)(d1.u.val, d2.u.val);
 		break;
 	}
-	d1.val = errcheck(d1.val, bltins[i].s);
+	d1.u.val = errcheck(d1.u.val, bltins[i].s);
 	push(d1);
 }

@@ -1,7 +1,8 @@
 %{
 #include <stddef.h>
-#include "hoc.h"
+#include "error.h"
 #include "symbol.h"
+#include "code.h"
 #include "gramm.h"
 %}
 
@@ -16,7 +17,8 @@
 }
 
 ([0-9]+\.?|[0-9]*\.[0-9]+)([eE][-+]?[0-9]*)? {
-	sscanf(yytext, "%lf", &yylval.val);
+	if (sscanf(yytext, "%lf", &yylval.val) != 1)
+		yyerror("could not get number");
 	return NUMBER;
 }
 

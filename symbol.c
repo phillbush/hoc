@@ -1,7 +1,7 @@
 #include <stdlib.h>
 #include <string.h>
-#include "hoc.h"
 #include "error.h"
+#include "symbol.h"
 
 static Symbol *symlist = NULL;   /* symbol table: linked list */
 
