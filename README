@@ -18,13 +18,10 @@ onto a stack).  Stack machines usually result in simple interpreters
 are the machine instructions; each is a function call with its
 arguments, if any, following the instruction.
 
-
 § FILES
 
 • README:       This file.
 • Makefile:     The makefile.
-• args.[hc]:    Routines for allocating and freeing argument lists.
-• bltin.[hc]:   Routines for built-in functions.
 • code.[hc]:    Routines for executing the machine instructions.
 • error.[hc]:   Routines for error printing.
 • symbol.[hc]:  Routines for handling the symbol table.
