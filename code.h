@@ -2,6 +2,7 @@
 #define DEBUG 0
 #endif
 
+/* macros */
 #define N1(p) ((p)->next)
 #define N2(p) ((p)->next->next)
 #define N3(p) ((p)->next->next->next)
@@ -16,7 +17,7 @@ typedef struct Datum {
 	} u;
 } Datum;
 
-/* machine instruction */
+/* machine instruction type */
 typedef struct Inst {
 	struct Inst *next;
 	enum {VAL, SYM, OPR, IP, NARG} type;
@@ -28,8 +29,6 @@ typedef struct Inst {
 		int narg;
 	} u;
 } Inst;
-
-extern double prev;
 
 /* routines called by main.o */
 void init(void);
@@ -63,6 +62,7 @@ void postinc(void);
 void postdec(void);
 void sympush(void);
 void constpush(void);
+void prevpush(void);
 void print(void);
 void prexpr(void);
 void gt(void);

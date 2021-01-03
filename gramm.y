@@ -92,7 +92,7 @@ exprlist:
 
 expr:
 	  NUMBER                        { $$ = oprcode(constpush); valcode($1); }
-	| PREVIOUS                      { $$ = oprcode(constpush); valcode(prev); }
+	| PREVIOUS                      { $$ = oprcode(prevpush); }
 	| VAR                           { $$ = oprcode(sympush); symcode($1); oprcode(eval); }
 	| expr '+' expr                 { oprcode(add); }
 	| expr '-' expr                 { oprcode(sub); }

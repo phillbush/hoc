@@ -109,13 +109,11 @@ static struct {
 	Inst *pc;
 } prog = {NULL, NULL, NULL, NULL};
 
-/* Frame */
-// TODO
-
 /* flags */
 static int breaking, continuing;
 
-double prev = 0;
+/* previously printed value */
+static double prev = 0;
 
 /* return pointer to operation name */
 static char *
@@ -275,6 +273,16 @@ constpush(void)
 
 	d.u.val = prog.pc->u.val;
 	prog.pc = prog.pc->next;
+	push(d);
+}
+
+/* push previously printed value onto stack */
+void
+prevpush(void)
+{
+	Datum d;
+
+	d.u.val = prev;
 	push(d);
 }
 
