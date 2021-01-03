@@ -49,7 +49,6 @@ shell with history support.
   their output to variables) (exercise 8-7).
 • Make the sizes of `stack` and `prog` dynamic, so hoc never runs out of
   space if memory can be obtained by calling malloc(3) (exercise 8-10).
-• Add support for reading from multiple files.
 • Add option -e to read code from command-line.
 
 
@@ -117,9 +116,11 @@ the type operation instead of calling functions from a function pointer.
 Using function pointer is more elegant and easier to maintain than using
 switch cases.
 
-Exercise 8-17 will not be implemented.  If you want editing features use
-a shell wrapper such as rlwrap(1).
+Exercise 8-17 will not be implemented.
+If you want editing features use a shell wrapper such as rlwrap(1).
 
+Reading from multiple files will not be implemented.
+Use cat(1).
 
 § HOW IT WORKS
 
