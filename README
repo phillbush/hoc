@@ -26,7 +26,6 @@ arguments, if any, following the instruction.
 • error.[hc]:   Routines for error printing.
 • symbol.[hc]:  Routines for handling the symbol table.
 • main.c:       The main routine.
-• hoc.h:        The common types and definitions.
 • lex.l:        The lexical analyzer.
 • gramm.y:      The grammar.
 

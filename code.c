@@ -557,7 +557,7 @@ print(void)
 	Datum d;
 
 	d = pop();
-	printf("\t%.8g\n", d.u.val);
+	printf("%.8g\n", d.u.val);
 	prev = d.u.val;
 }
 
