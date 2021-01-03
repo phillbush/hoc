@@ -48,8 +48,6 @@ shell with history support.
 
 • Implement a full stage-6 hoc.
 • Write the manual.
-• Add the built-in rand(), which returns a floating point random
-  variable uniformly distributed on the interval (0,1) (exercise 8-6).
 • Add a facility to execute system commands from within hoc (and assign
   their output to variables) (exercise 8-7).
 • Make the sizes of `stack` and `prog` dynamic, so hoc never runs out of
@@ -81,6 +79,8 @@ assignment to constants.
 
 Exercise 8-6 (n-ary functions).
 This version of hoc(1) support built-in functions with variable arity.
+It also has the built-in function rand(), which returns a floating point
+random variable uniformly distributed on the interval (0,1).
 
 Exercise 8-8 (table of built-in functions).
 This version of hoc(1) uses a table instead of a set of essentially

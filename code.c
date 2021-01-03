@@ -1,7 +1,9 @@
 #include <errno.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <math.h>
+#include <time.h>
 #include "hoc.h"
 #include "code.h"
 #include "symbol.h"
@@ -12,6 +14,7 @@
 #define NPROG  2000
 
 /* function declaration, needed for bltins[] */
+static double Random(void);
 static double Integer(double);
 
 /* keywords */
@@ -71,16 +74,18 @@ static struct {
 	char *s;
 	int n;
 	union {
-		double f0;
+		double d;
+		double (*f0)(void);
 		double (*f1)(double);
 		double (*f2)(double, double);
 	} u;
 } bltins[] = {
-	{"pi",      0,  .u.f0 = M_PI},
-	{"e",       0,  .u.f0 = M_E},
-	{"gamma",   0,  .u.f0 = 0.57721566490153286060},
-	{"deg",     0,  .u.f0 = 57.29577951308232087680},
-	{"phi",     0,  .u.f0 = 1.61803398874989484820},
+	{"pi",      -1, .u.d = M_PI},
+	{"e",       -1, .u.d = M_E},
+	{"gamma",   -1, .u.d = 0.57721566490153286060},
+	{"deg",     -1, .u.d = 57.29577951308232087680},
+	{"phi",     -1, .u.d = 1.61803398874989484820},
+	{"rand",    0,  .u.f0 = Random},
 	{"int",     1,  .u.f1 = Integer},
 	{"abs",     1,  .u.f1 = fabs},
 	{"atan",    1,  .u.f1 = atan},
@@ -91,7 +96,7 @@ static struct {
 	{"sin",     1,  .u.f1 = sin},
 	{"sqrt",    1,  .u.f1 = sqrt},
 	{"atan2",   2,  .u.f2 = atan2},
-	{NULL,      0,  .u.f0 = 0.0}
+	{NULL,      0,  .u.d  = 0.0}
 };
 
 /* Stack */
@@ -110,10 +115,11 @@ double prev = 0;
 
 /* install names into symbol table */
 void
-initsymtab(void)
+init(void)
 {
 	int i;
 
+	srand(time(NULL));
 	for (i = 0; keywords[i].s; i++)
 		install(keywords[i].s, keywords[i].v, 0.0);
 	for (i = 0; bltins[i].s; i++)
@@ -687,6 +693,13 @@ forcode(void)
 	pc = (savepc + 3)->u.ip;
 }
 
+/* get random from 0 to 1 */
+static double
+Random(void)
+{
+	return (double)rand() / RAND_MAX;
+}
+
 /* get integer part of double */
 static double
 Integer(double n)
@@ -726,8 +739,11 @@ bltin(void)
 		yyerror("%s: wrong arity", bltins[i].s);
 	errno = 0;
 	switch (narg) {
+	case -1:
+		d1.val = bltins[i].u.d;
+		break;
 	case 0:
-		d1.val = bltins[i].u.f0;
+		d1.val = (*bltins[i].u.f0)();
 		break;
 	case 1:
 		d1 = pop();

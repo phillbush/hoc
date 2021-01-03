@@ -57,7 +57,7 @@ main(int argc, char *argv[])
 		yyin = fp;
 
 	/* install keywords and bultin functions */
-	initsymtab();
+	init();
 
 	/* parse and execute input until EOF */
 	setjmp(begin);

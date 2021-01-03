@@ -8,7 +8,7 @@ Inst *code(Inst inst);
 
 void execute(Inst *);
 
-void initsymtab(void);
+void init(void);
 void initcode(void);
 
 /* instruction operation functions */
