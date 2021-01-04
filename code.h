@@ -8,31 +8,14 @@
 #define N3(p) ((p)->next->next->next)
 #define N4(p) ((p)->next->next->next->next)
 
-/* interpreter stack type */
-typedef struct Datum {
-	struct Datum *next;
-	union {
-		double val;
-		Symbol *sym;
-	} u;
-} Datum;
-
-/* machine instruction type */
-typedef struct Inst {
-	struct Inst *next;
-	enum {VAL, SYM, OPR, IP, NARG} type;
-	union {
-		double val;
-		Symbol *sym;
-		void (*opr)(void);
-		struct Inst *ip;
-		int narg;
-	} u;
-} Inst;
+/* routines called by lex.o */
+String *addstr(char *, int);
 
 /* routines called by main.o */
 void init(void);
 void initcode(void);
+void cleancode(void);
+void cleanup(void);
 void debug(void);
 void execute(Inst *);
 
@@ -63,6 +46,7 @@ void postdec(void);
 void sympush(void);
 void constpush(void);
 void prevpush(void);
+void strpush(void);
 void print(void);
 void prexpr(void);
 void gt(void);

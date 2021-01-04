@@ -5,16 +5,17 @@
 #include <string.h>
 #include <math.h>
 #include <time.h>
+#include "hoc.h"
+#include "code.h"
 #include "error.h"
 #include "symbol.h"
-#include "code.h"
 #include "gramm.h"
 
 /* function declaration, needed for bltins[] */
 static double Random(void);
 static double Integer(double);
 
-/* keywords */
+/* table of keywords */
 static struct {
 	char *s;
 	int v;
@@ -29,7 +30,7 @@ static struct {
 	{NULL,          0}
 };
 
-/* operations */
+/* table of operations */
 static struct {
 	char *s;
 	void (*f)(void);
@@ -68,10 +69,10 @@ static struct {
 	{NULL,        NULL},
 };
 
-/* bltins */
+/* table of bltins functions */
 static struct {
-	char *s;
-	int n;
+	char *s;        /* name */
+	int n;          /* arity (-1 = constant) */
 	union {
 		double d;
 		double (*f0)(void);
@@ -98,10 +99,10 @@ static struct {
 	{NULL,      0,  .u.d  = 0.0}
 };
 
-/* datum stack */
+/* the datum stack */
 static Datum *stack = NULL;
 
-/* program queue */
+/* the machine */
 static struct {
 	Inst *head;
 	Inst *tail;
@@ -109,11 +110,39 @@ static struct {
 	Inst *pc;
 } prog = {NULL, NULL, NULL, NULL};
 
+/* the string list */
+static String *autostrings = NULL;      /* strings freed automatically after execution */
+static String *statstrings = NULL;      /* strings that should be manually freed */
+
 /* flags */
 static int breaking, continuing;
 
 /* previously printed value */
-static double prev = 0;
+static Datum prev = {.next = NULL, .isstr = 0, .u.val = 0.0};
+
+/* add str to String list */
+String *
+addstr(char *s, int final)
+{
+	String **list;
+	String *p;
+
+	if (final)
+		list = &statstrings;
+	else
+		list = &autostrings;
+	if ((p = malloc(sizeof *p)) == NULL) {
+		free(s);
+		yyerror("out of memory");
+	}
+	p->s = s;
+	if (*list)
+		(*list)->prev = p;
+	p->next = *list;
+	p->prev = NULL;
+	*list = p;
+	return p;
+}
 
 /* return pointer to operation name */
 static char *
@@ -127,7 +156,7 @@ oprname(void (*opr)(void))
 	return "unknown";
 }
 
-/* initiate machine */
+/* initialize machine */
 void
 init(void)
 {
@@ -139,9 +168,9 @@ init(void)
 	prog.progp = prog.head;
 	srand(time(NULL));
 	for (i = 0; keywords[i].s; i++)
-		install(keywords[i].s, keywords[i].v, 0.0);
+		install(keywords[i].s, keywords[i].v);
 	for (i = 0; bltins[i].s; i++)
-		install(bltins[i].s, BLTIN, 0.0);
+		install(bltins[i].s, BLTIN);
 }
 
 /* initialize for code generation */
@@ -151,6 +180,46 @@ initcode(void)
 	continuing = breaking = 0;
 	prog.tail = NULL;
 	prog.progp = prog.head;
+}
+
+/* clean up allocated memory from previous execution */
+void
+cleancode(void)
+{
+	String *sp, *sq;
+	Datum *dp, *dq;
+
+	sp = autostrings;
+	while (sp) {
+		sq = sp;
+		sp = sp->next;
+		free(sq->s);
+		free(sq);
+	}
+	autostrings = NULL;
+	dp = stack;
+	while (dp) {
+		dq = dp;
+		dp = dp->next;
+		free(dq);
+	}
+	stack = NULL;
+}
+
+/* clean up machine */
+void
+cleanup(void)
+{
+	String *p, *tmp;
+
+	cleansym();
+	p = statstrings;
+	while (p) {
+		tmp = p;
+		p = p->next;
+		free(tmp->s);
+		free(tmp);
+	}
 }
 
 /* debug the machine */
@@ -174,6 +243,9 @@ debug(void)
 			break;
 		case OPR:
 			fprintf(stderr, "OPR  %s", oprname(p->u.opr));
+			break;
+		case STR:
+			fprintf(stderr, "STR  %s", p->u.str->s);
 			break;
 		case IP:
 			if (p->u.ip == NULL)
@@ -258,7 +330,7 @@ pop(void)
 	return d;
 }
 
-/* pop and return top element from stack */
+/* pop top element from stack */
 void
 oprpop(void)
 {
@@ -272,6 +344,7 @@ constpush(void)
 	Datum d;
 
 	d.u.val = prog.pc->u.val;
+	d.isstr = 0;
 	prog.pc = prog.pc->next;
 	push(d);
 }
@@ -280,9 +353,18 @@ constpush(void)
 void
 prevpush(void)
 {
+	push(prev);
+}
+
+/* push string onto stack */
+void
+strpush(void)
+{
 	Datum d;
 
-	d.u.val = prev;
+	d.u.str = prog.pc->u.str;
+	d.isstr = 1;
+	prog.pc = prog.pc->next;
 	push(d);
 }
 
@@ -297,14 +379,90 @@ sympush(void)
 	push(d);
 }
 
+/* free String from datum, String should be listed on statstrings! */
+static void
+dfree(Datum d, int issym)
+{
+	String *str;
+
+	str = NULL;
+	if (issym) {
+		if (d.u.sym->isstr && d.u.sym->u.str)
+			str = d.u.sym->u.str;
+	} else {
+		if (d.isstr && d.u.str)
+			str = d.u.str;
+	}
+	if (!str)
+		return;
+	free(str->s);
+	if (str->next)
+		str->next = str->prev;
+	if (str->prev)
+		str->prev->next = str->next;
+	else
+		statstrings = str;
+	free(str);
+}
+
+/* duplicate datum */
+static Datum
+ddup(Datum d, int issym, int final)
+{
+	Datum ret;
+	char *s;
+
+	if (issym) {
+		if ((d.isstr = d.u.sym->isstr)) {
+			d.u.str = d.u.sym->u.str;
+		} else {
+			d.u.val = d.u.sym->u.val;
+		}
+	}
+	if (d.isstr && d.u.str) {
+		if ((s = strdup(d.u.str->s)) == NULL)
+			yyerror("out of memory");
+		ret.u.str = addstr(s, final);
+		ret.isstr = 1;
+	} else {
+		ret.u.val = d.u.val;
+		ret.isstr = 0;
+	}
+	return ret;
+}
+
+/* pop numeric value from stack */
+static Datum
+popnum(int issym)
+{
+	Datum d;
+	double v;
+
+	d = pop();
+	if (issym) {
+		if (d.u.sym->isstr) {
+			v = atof(d.u.sym->u.str->s);
+			d.u.sym->u.val = v;
+		}
+		d.u.sym->isstr = 0;
+	} else {
+		if (d.isstr) {
+			v = atof(d.u.str->s);
+			d.u.val = v;
+		}
+	}
+	d.isstr = 0;
+	return d;
+}
+
 /* add top two elements on stack */
 void
 add(void)
 {
 	Datum d1, d2;
 
-	d2 = pop();
-	d1 = pop();
+	d2 = popnum(0);
+	d1 = popnum(0);
 	d1.u.val += d2.u.val;
 	push(d1);
 }
@@ -315,8 +473,8 @@ sub(void)
 {
 	Datum d1, d2;
 
-	d2 = pop();
-	d1 = pop();
+	d2 = popnum(0);
+	d1 = popnum(0);
 	d1.u.val -= d2.u.val;
 	push(d1);
 }
@@ -327,8 +485,8 @@ mul(void)
 {
 	Datum d1, d2;
 
-	d2 = pop();
-	d1 = pop();
+	d2 = popnum(0);
+	d1 = popnum(0);
 	d1.u.val *= d2.u.val;
 	push(d1);
 }
@@ -339,10 +497,10 @@ divd(void)
 {
 	Datum d1, d2;
 
-	d2 = pop();
+	d2 = popnum(0);
 	if (d2.u.val == 0.0)
 		yyerror("division by zero");
-	d1 = pop();
+	d1 = popnum(0);
 	d1.u.val /= d2.u.val;
 	push(d1);
 }
@@ -353,10 +511,10 @@ mod(void)
 {
 	Datum d1, d2;
 
-	d2 = pop();
+	d2 = popnum(0);
 	if (d2.u.val == 0.0)
 		yyerror("module by zero");
-	d1 = pop();
+	d1 = popnum(0);
 	d1.u.val = fmod(d1.u.val, d2.u.val);
 	push(d1);
 }
@@ -367,7 +525,7 @@ negate(void)
 {
 	Datum d;
 
-	d = pop();
+	d = popnum(0);
 	d.u.val = -d.u.val;
 	push(d);
 }
@@ -378,8 +536,8 @@ power(void)
 {
 	Datum d1, d2;
 
-	d2 = pop();
-	d1 = pop();
+	d2 = popnum(0);
+	d1 = popnum(0);
 	d1.u.val = pow(d1.u.val, d2.u.val);
 	push(d1);
 }
@@ -402,8 +560,27 @@ eval(void)
 
 	d = pop();
 	verifyeval(d.u.sym);
-	d.u.val = d.u.sym->val;
+	d = ddup(d, 1, 0);
 	push(d);
+}
+
+/* get sym from pc and cast it into a number; and increment pc */
+static Datum
+dsymnum(void)
+{
+	Datum d;
+	double v;
+
+	d.u.sym = prog.pc->u.sym;
+	prog.pc = prog.pc->next;
+	if (d.u.sym->isstr) {
+		v = atof(d.u.sym->u.str->s);
+		dfree(d, 1);
+		d.u.sym->u.val = v;
+		d.u.sym->isstr = 0;
+	}
+	d.isstr = 0;
+	return d;
 }
 
 /* pre-increment variable */
@@ -412,10 +589,9 @@ preinc(void)
 {
 	Datum d;
 
-	d.u.sym = prog.pc->u.sym;
-	prog.pc = prog.pc->next;
+	d = dsymnum();
 	verifyeval(d.u.sym);
-	d.u.val = d.u.sym->val += 1.0;
+	d.u.val = d.u.sym->u.val += 1.0;
 	push(d);
 }
 
@@ -425,10 +601,9 @@ predec(void)
 {
 	Datum d;
 
-	d.u.sym = prog.pc->u.sym;
-	prog.pc = prog.pc->next;
+	d = dsymnum();
 	verifyeval(d.u.sym);
-	d.u.val = d.u.sym->val -= 1.0;
+	d.u.val = d.u.sym->u.val -= 1.0;
 	push(d);
 }
 
@@ -439,11 +614,10 @@ postinc(void)
 	Datum d;
 	double v;
 
-	d.u.sym = prog.pc->u.sym;
-	prog.pc = prog.pc->next;
+	d = dsymnum();
 	verifyeval(d.u.sym);
-	v = d.u.sym->val;
-	d.u.sym->val += 1.0;
+	v = d.u.sym->u.val;
+	d.u.sym->u.val += 1.0;
 	d.u.val = v;
 	push(d);
 }
@@ -455,11 +629,10 @@ postdec(void)
 	Datum d;
 	double v;
 
-	d.u.sym = prog.pc->u.sym;
-	prog.pc = prog.pc->next;
+	d = dsymnum();
 	verifyeval(d.u.sym);
-	v = d.u.sym->val;
-	d.u.sym->val -= 1.0;
+	v = d.u.sym->u.val;
+	d.u.sym->u.val -= 1.0;
 	d.u.val = v;
 	push(d);
 }
@@ -475,12 +648,20 @@ verifyassign(Symbol *s)
 void
 assign(void)
 {
-	Datum d1, d2;
+	Datum d, d1, d2;
 
 	d1 = pop();
 	d2 = pop();
 	verifyassign(d1.u.sym);
-	d1.u.sym->val = d2.u.val;
+	d1.u.sym->isstr = d2.isstr;
+	if (d2.isstr) {
+		d = ddup(d2, 0, 1);
+		d1.u.sym->u.str = d.u.str;
+		d1.u.sym->isstr = 1;
+	} else {
+		d1.u.sym->u.val = d2.u.val;
+		d1.u.sym->isstr = 0;
+	}
 	d1.u.sym->type = VAR;
 	push(d2);
 }
@@ -491,10 +672,10 @@ addeq(void)
 {
 	Datum d1, d2;
 
-	d1 = pop();
-	d2 = pop();
+	d1 = popnum(1);
+	d2 = popnum(0);
 	verifyassign(d1.u.sym);
-	d2.u.val = d1.u.sym->val += d2.u.val;
+	d2.u.val = d1.u.sym->u.val += d2.u.val;
 	d1.u.sym->type = VAR;
 	push(d2);
 }
@@ -505,10 +686,10 @@ subeq(void)
 {
 	Datum d1, d2;
 
-	d1 = pop();
-	d2 = pop();
+	d1 = popnum(1);
+	d2 = popnum(0);
 	verifyassign(d1.u.sym);
-	d2.u.val = d1.u.sym->val -= d2.u.val;
+	d2.u.val = d1.u.sym->u.val -= d2.u.val;
 	d1.u.sym->type = VAR;
 	push(d2);
 }
@@ -519,10 +700,10 @@ muleq(void)
 {
 	Datum d1, d2;
 
-	d1 = pop();
-	d2 = pop();
+	d1 = popnum(1);
+	d2 = popnum(0);
 	verifyassign(d1.u.sym);
-	d2.u.val = d1.u.sym->val *= d2.u.val;
+	d2.u.val = d1.u.sym->u.val *= d2.u.val;
 	d1.u.sym->type = VAR;
 	push(d2);
 }
@@ -533,10 +714,10 @@ diveq(void)
 {
 	Datum d1, d2;
 
-	d1 = pop();
-	d2 = pop();
+	d1 = popnum(1);
+	d2 = popnum(0);
 	verifyassign(d1.u.sym);
-	d2.u.val = d1.u.sym->val /= d2.u.val;
+	d2.u.val = d1.u.sym->u.val /= d2.u.val;
 	d1.u.sym->type = VAR;
 	push(d2);
 }
@@ -548,34 +729,44 @@ modeq(void)
 	Datum d1, d2;
 	long n;
 
-	d1 = pop();
-	d2 = pop();
+	d1 = popnum(1);
+	d2 = popnum(0);
 	verifyassign(d1.u.sym);
-	n = d1.u.sym->val;
+	n = d1.u.sym->u.val;
 	n %= (long)d2.u.val;
-	d2.u.val = d1.u.sym->val = n;
+	d2.u.val = d1.u.sym->u.val = n;
 	d1.u.sym->type = VAR;
 	push(d2);
 }
 
 /* pop top value from stack, print it */
+static Datum
+pr(void)
+{
+	Datum d;
+
+	d = pop();
+	if (d.isstr)
+		printf("%s\n", d.u.str->s);
+	else
+		printf("%.8g\n", d.u.val);
+	return d;
+}
+
 void
 print(void)
 {
 	Datum d;
 
-	d = pop();
-	printf("%.8g\n", d.u.val);
-	prev = d.u.val;
+	dfree(prev, 0);
+	d = pr();
+	prev = ddup(d, 0, 1);
 }
 
 void
 prexpr(void)
 {
-	Datum d;
-
-	d = pop();
-	printf("%.8g\n", d.u.val);
+	(void)pr();
 }
 
 void
@@ -583,8 +774,8 @@ gt(void)
 {
 	Datum d1, d2;
 
-	d2 = pop();
-	d1 = pop();
+	d2 = popnum(0);
+	d1 = popnum(0);
 	d1.u.val = (double)(d1.u.val > d2.u.val);
 	push(d1);
 }
@@ -594,8 +785,8 @@ ge(void)
 {
 	Datum d1, d2;
 
-	d2 = pop();
-	d1 = pop();
+	d2 = popnum(0);
+	d1 = popnum(0);
 	d1.u.val = (double)(d1.u.val >= d2.u.val);
 	push(d1);
 }
@@ -605,8 +796,8 @@ lt(void)
 {
 	Datum d1, d2;
 
-	d2 = pop();
-	d1 = pop();
+	d2 = popnum(0);
+	d1 = popnum(0);
 	d1.u.val = (double)(d1.u.val < d2.u.val);
 	push(d1);
 }
@@ -616,8 +807,8 @@ le(void)
 {
 	Datum d1, d2;
 
-	d2 = pop();
-	d1 = pop();
+	d2 = popnum(0);
+	d1 = popnum(0);
 	d1.u.val = (double)(d1.u.val <= d2.u.val);
 	push(d1);
 }
@@ -627,8 +818,8 @@ eq(void)
 {
 	Datum d1, d2;
 
-	d2 = pop();
-	d1 = pop();
+	d2 = popnum(0);
+	d1 = popnum(0);
 	d1.u.val = (double)(d1.u.val == d2.u.val);
 	push(d1);
 }
@@ -638,8 +829,8 @@ ne(void)
 {
 	Datum d1, d2;
 
-	d2 = pop();
-	d1 = pop();
+	d2 = popnum(0);
+	d1 = popnum(0);
 	d1.u.val = (double)(d1.u.val != d2.u.val);
 	push(d1);
 }
@@ -649,7 +840,7 @@ not(void)
 {
 	Datum d;
 
-	d = pop();
+	d = popnum(0);
 	d.u.val = (double)(!d.u.val);
 	push(d);
 }
@@ -661,10 +852,10 @@ and(void)
 	Inst *savepc;
 
 	savepc = prog.pc;
-	d = pop();
+	d = popnum(0);
 	if (d.u.val) {
 		execute(savepc->u.ip);
-		d = pop();
+		d = popnum(0);
 	}
 	d.u.val = d.u.val ? 1.0 : 0.0;
 	push(d);
@@ -678,10 +869,10 @@ or(void)
 	Inst *savepc;
 
 	savepc = prog.pc;
-	d = pop();
+	d = popnum(0);
 	if (!d.u.val) {
 		execute(savepc->u.ip);
-		d = pop();
+		d = popnum(0);
 	}
 	d.u.val = d.u.val ? 1.0 : 0.0;
 	push(d);
@@ -696,7 +887,7 @@ cond(Inst *pc)
 	if (pc == NULL)
 		return 1.0;
 	execute(pc);
-	d = pop();
+	d = popnum(0);
 	return d.u.val;
 }
 
@@ -707,7 +898,7 @@ execpop(Inst *pc)
 
 	if (pc && pc->u.opr) {
 		execute(pc);
-		d = pop();
+		d = popnum(0);
 	} else {
 		d.u.val = 0.0;
 	}
@@ -755,7 +946,7 @@ forcode(void)
 	Inst *savepc;
 
 	savepc = prog.pc;
-	for (execpop(N4(savepc)); cond(savepc->u.ip); execpop(N1(savepc)->u.ip)) {
+	for ((void)execpop(N4(savepc)); cond(savepc->u.ip); (void)execpop(N1(savepc)->u.ip)) {
 		execute(N2(savepc)->u.ip);
 		if (continuing) {
 			continuing = 0;
@@ -838,15 +1029,16 @@ bltin(void)
 		d1.u.val = (*bltins[i].u.f0)();
 		break;
 	case 1:
-		d1 = pop();
+		d1 = popnum(0);
 		d1.u.val = (*bltins[i].u.f1)(d1.u.val);
 		break;
 	case 2:
-		d2 = pop();
-		d1 = pop();
+		d2 = popnum(0);
+		d1 = popnum(0);
 		d1.u.val = (*bltins[i].u.f2)(d1.u.val, d2.u.val);
 		break;
 	}
 	d1.u.val = errcheck(d1.u.val, bltins[i].s);
+	d1.isstr = 0;
 	push(d1);
 }

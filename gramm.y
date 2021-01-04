@@ -3,12 +3,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
-#include "error.h"
-#include "symbol.h"
+#include "hoc.h"
 #include "code.h"
+#include "error.h"
 
-#define argcode(a) code((Inst){.type = NARG, .u.narg = (a)})
 #define valcode(v) code((Inst){.type = VAL, .u.val = (v)})
+#define argcode(a) code((Inst){.type = NARG, .u.narg = (a)})
+#define strcode(s) code((Inst){.type = STR, .u.str = (s)})
 #define oprcode(o) code((Inst){.type = OPR, .u.opr = (o)})
 #define symcode(s) code((Inst){.type = SYM, .u.sym = (s)})
 #define fill2(x, a, b) \
@@ -31,12 +32,14 @@ int yylex(void);
 %}
 
 %union {
-	int narg;
 	Symbol *sym;
-	double val;
+	String *str;
 	Inst *inst;
+	double val;
+	int narg;
 }
 
+%token <str>  STRING
 %token <val>  NUMBER PREVIOUS
 %token <sym>  VAR BLTIN UNDEF PRINT WHILE IF ELSE FOR BREAK CONTINUE
 %type  <narg> args arglist
@@ -92,6 +95,7 @@ exprlist:
 
 expr:
 	  NUMBER                        { $$ = oprcode(constpush); valcode($1); }
+	| STRING                        { $$ = oprcode(strpush); strcode($1); }
 	| PREVIOUS                      { $$ = oprcode(prevpush); }
 	| VAR                           { $$ = oprcode(sympush); symcode($1); oprcode(eval); }
 	| expr '+' expr                 { oprcode(add); }

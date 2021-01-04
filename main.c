@@ -5,10 +5,8 @@
 #include <setjmp.h>
 #include <signal.h>
 #include <unistd.h>
-#include "error.h"
-#include "symbol.h"
+#include "hoc.h"
 #include "code.h"
-#include "gramm.h"
 
 extern FILE *yyin;
 jmp_buf begin;
@@ -28,7 +26,7 @@ static void
 sigfpehand(int sig)
 {
 	(void)sig;
-	yyerror("floating point exception");
+	err(1, "floating point exception");
 }
 
 /* hoc */
@@ -55,7 +53,7 @@ main(int argc, char *argv[])
 	if (fp)
 		yyin = fp;
 
-	/* install keywords and bultin functions */
+	/* initialize machine */
 	init();
 
 	/* parse and execute input until EOF */
@@ -64,12 +62,13 @@ main(int argc, char *argv[])
 		if (DEBUG)
 			debug();
 		execute(NULL);
+		cleancode();
 	}
 
-	/* close input file and clear symbol table */
+	/* cleanup machine and close input file */
+	cleanup();
 	if (fp)
 		fclose(fp);
-	cleansym();
 
 	return 0;
 }

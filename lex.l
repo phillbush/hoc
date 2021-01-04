@@ -1,9 +1,22 @@
+D       [0-9]
+E       ([Ee][+-]?{D}*)
+L       [a-zA-Z_]
+A       [a-zA-Z0-9_]
+ES      (\\(['"\?\\abfnrtv]|[0-7]{1,3}|x[a-fA-F0-9]+))
+
 %{
-#include <stddef.h>
+#include <ctype.h>
+#include <stdlib.h>
+#include <string.h>
+#include "hoc.h"
+#include "code.h"
 #include "error.h"
 #include "symbol.h"
-#include "code.h"
 #include "gramm.h"
+
+static int makenum(char *yytext);
+static int makesym(char *yytext);
+static int makestr(char *yytext);
 %}
 
 %option nounput
@@ -12,26 +25,48 @@
 
 %%
 
-[ \t] {
-	;
-}
+[ \t]                           { ; }
+({D}+\.?|{D}*\.{D}+){E}?        { return makenum(yytext); }
+{L}{A}*                         { return makesym(yytext); }
+\"([^"\\\n]|{ES})*\"            { return makestr(yytext); }
+\.                              { return PREVIOUS; }
+\+\+                            { return INC; }
+--                              { return DEC; }
+\+=                             { return ADDEQ; }
+-=                              { return SUBEQ; }
+\*=                             { return MULEQ; }
+\/=                             { return DIVEQ; }
+%=                              { return MODEQ; }
+>=                              { return GE; }
+>                               { return GT; }
+\<=                             { return LE; }
+\<                              { return LT; }
+==                              { return EQ; }
+!=                              { return NE; }
+\|\|                            { return OR; }
+&&                              { return AND; }
+!                               { return NOT; }
+#.*                             { return '\n'; }
+\n                              { return '\n'; }
+.                               { return *yytext; }
 
-([0-9]+\.?|[0-9]*\.[0-9]+)([eE][-+]?[0-9]*)? {
-	if (sscanf(yytext, "%lf", &yylval.val) != 1)
-		yyerror("could not get number");
+%%
+
+static int
+makenum(char *yytext)
+{
+	yylval.val = atof(yytext);
 	return NUMBER;
 }
 
-\.  {
-	return PREVIOUS;
-}
-
-[a-zA-Z_][a-zA-Z0-9_]* {
+static int
+makesym(char *yytext)
+{
 	Symbol *sym;
 
 	/* if name isn't found, it is installed with the type UNDEF */
 	if ((sym = lookup(yytext)) == NULL)
-		sym = install(yytext, UNDEF, 0.0);
+		sym = install(yytext, UNDEF);
 
 	yylval.sym = sym;
 
@@ -47,74 +82,30 @@
 	return sym->type == UNDEF ? VAR : sym->type;
 }
 
-\+\+ {
-	return INC;
-}
+static int
+makestr(char *yytext)
+{
+	static char indextab[] = "'\"\\abfnrtv";
+	static char transtab[] = "''\"\"\\\\a\ab\bf\fn\nr\rt\tv\v";
+	char *buf, *s, *t, *ind;
+	ssize_t len;
 
--- {
-	return DEC;
-}
-
-\+= {
-	return ADDEQ;
-}
-
--= {
-	return SUBEQ;
-}
-
-\*= {
-	return MULEQ;
-}
-
-\/= {
-	return DIVEQ;
-}
-
-%= {
-	return MODEQ;
-}
-
->= {
-	return GE;
-}
-
-> {
-	return GT;
-}
-
-\<= {
-	return LE;
-}
-
-\< {
-	return LT;
-}
-
-== {
-	return EQ;
-}
-
-!= {
-	return NE;
-}
-
-\|\| {
-	return OR;
-}
-
-&& {
-	return AND;
-}
-
-! {
-	return NOT;
-}
-
-(#.*)?\n {
-	return '\n';
-}
-
-. {
-	return *yytext;
+	len = strlen(yytext);
+	if ((buf = malloc(len)) == NULL)        /* we don't need + 1 for yytext has quotation marks */
+		yyerror("out of memory");
+	for (s = buf, t = yytext + 1; t - yytext + 1 < len; s++, t++) {
+		if (*t != '\\') {
+			*s = *t;
+		} else {
+			t++;
+			if (strchr(indextab, *t) && (ind = strchr(transtab, *t))) {
+				*s = *(ind + 1);
+			} else {
+				*s = *t;
+			}
+		}
+	}
+	*s = '\0';
+	yylval.str = addstr(buf, 0);
+	return STRING;
 }

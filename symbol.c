@@ -1,7 +1,7 @@
 #include <stdlib.h>
 #include <string.h>
+#include "hoc.h"
 #include "error.h"
-#include "symbol.h"
 
 static Symbol *symlist = NULL;   /* symbol table: linked list */
 
@@ -39,14 +39,15 @@ lookup(const char *s)
 
 /* install s in symbol table */
 Symbol *
-install(const char *s, int t, double d)
+install(const char *s, int t)
 {
 	Symbol *sym;
 
 	sym = emalloc(sizeof *sym);
 	sym->name = estrdup(s);
 	sym->type = t;
-	sym->val = d;
+	sym->isstr = 0;
+	sym->u.val = 0.0;
 	sym->next = symlist;
 	symlist = sym;
 	return sym;

@@ -3,7 +3,6 @@
 #include <setjmp.h>
 #include <stdarg.h>
 #include <stdio.h>
-#include "error.h"
 
 static char buf[BUFSIZ];
 extern jmp_buf begin;

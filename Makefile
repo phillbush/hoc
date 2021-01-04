@@ -13,12 +13,13 @@ LDFLAGS = ${LDLIBS}
 
 all: ${PROG}
 
-main.o:   error.h symbol.h code.h gramm.h
-code.o:   error.h symbol.h code.h gramm.h
-lex.o:    error.h symbol.h code.h gramm.h
-gramm.o:  error.h symbol.h code.h
-symbol.o: error.h symbol.h
-error.o:  error.h
+${OBJS}:  hoc.h
+code.o:   code.h error.h symbol.h gramm.h
+lex.o:    code.h error.h symbol.h gramm.h
+gramm.o:  code.h error.h
+main.o:   code.h
+symbol.o: error.h
+error.o:
 
 ${PROG}: ${OBJS}
 	${CC} -o $@ ${OBJS} ${LDFLAGS}
