@@ -41,7 +41,7 @@ int yylex(void);
 
 %token <str>  STRING
 %token <val>  NUMBER PREVIOUS
-%token <sym>  VAR BLTIN UNDEF PRINT WHILE IF ELSE FOR BREAK CONTINUE
+%token <sym>  VAR BLTIN UNDEF PRINT PRINTF WHILE IF ELSE FOR BREAK CONTINUE
 %type  <narg> args arglist
 %type  <inst> expr exprlist stmt stmtlist asgn
 %type  <inst> and or while if cond forcond forloop begin end
@@ -63,7 +63,7 @@ list:
 	| list term
 	| list stmt term        { oprcode(NULL); return 1; }
 	| list asgn term        { oprcode(oprpop); oprcode(NULL); return 1; }
-	| list exprlist term    { oprcode(print); oprcode(NULL); return 1; }
+	| list exprlist term    { oprcode(println); oprcode(NULL); return 1; }
 	| list error term       { yyerrok; }
 	;
 
@@ -85,7 +85,8 @@ stmt:
 	| BREAK                                 { looponly($1->name); oprcode(breakcode); }
 	| CONTINUE                              { looponly($1->name); oprcode(continuecode); }
 	| exprlist                              { oprcode(oprpop); }
-	| PRINT exprlist                        { oprcode(prexpr); $$ = $2; }
+	| PRINT begin arglist                   { $$ = $2; oprcode(_print); argcode($3); }
+	| PRINTF begin arglist                  { $$ = $2; oprcode(_printf); argcode($3); }
 	| if cond stmt end                      { fill3($1, $3, NULL, $4); }
 	| if cond stmt end ELSE stmt end        { fill3($1, $3, $6, $7); }
 	| while cond stmt end                   { fill2($1, $3, $4); inloop--; }

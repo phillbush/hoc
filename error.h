@@ -1,2 +1,3 @@
-/* warn an execution error and jump to main loop */
+void longjump(void);
+void warning(const char *fmt, ...);
 void yyerror(const char *fmt, ...);

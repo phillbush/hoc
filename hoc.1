@@ -190,14 +190,21 @@ They all return the result of the assignment.
 Comma (used to group expressions).
 .SS Statements
 A statement can be an expression, a compound statement, a print statement,
-a control flow statement, or a procedure or function definition statement.
+a printf statement, a control flow statement, or a procedure or function definition statement.
 A statement must be terminated by a newline or a semi-colon.
 A compound statement is a list of statements enclosed in curly braces (this list can be empty).
 .PP
 A print statement consists of the word
 .B print
 followed by a comma\-delimited list of expressions.
-A print statement prints the value of each expression.
+A print statement prints the value of each expression separated by a space and ending with a newline.
+.PP
+A printf statement consists of a word
+.B printf
+followed by a comma\-delimited list of expressions.
+The first expression (called format) must be a format string as specified in
+.IR printf (1),
+and the following expressions must match in number the number of format specifications in the format.
 .PP
 The following is a list of control flow statements.
 .TP
@@ -256,6 +263,10 @@ r
 	0.866025
 r*2
 	1.73205
+n = 10
+s = "banana"
+printf "%-07d:%s\n", n, s
+	10     :banana
 .EE
 .SH SEE ALSO
 .IR bc (1),

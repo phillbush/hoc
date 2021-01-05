@@ -1,3 +1,4 @@
+#include <ctype.h>
 #include <err.h>
 #include <errno.h>
 #include <stdio.h>
@@ -56,6 +57,7 @@ static struct {
 	{"else",        ELSE},
 	{"while",       WHILE},
 	{"print",       PRINT},
+	{"printf",      PRINTF},
 	{"for",         FOR},
 	{"break",       BREAK},
 	{"continue",    CONTINUE},
@@ -90,8 +92,9 @@ static struct {
 	{"constpush",    constpush},
 	{"prevpush",     prevpush},
 	{"strpush",      strpush},
-	{"print",        print},
-	{"prexpr",       prexpr},
+	{"println",      println},
+	{"print",        _print},
+	{"printf",       _printf},
 	{"gt",           gt},
 	{"ge",           ge},
 	{"lt",           lt},
@@ -228,7 +231,7 @@ prepare(void)
 	prog.tail = NULL;
 	prog.progp = prog.head;
 	FREEAUTO()
-	FREESTACK();
+	FREESTACK()
 }
 
 /* clean up machine */
@@ -748,26 +751,24 @@ modeq(void)
 	push(d2);
 }
 
-/* pop top value from stack, print it */
-static Datum
-pr(void)
+/* print content of datum */
+static void
+pr(Datum d)
+{
+	if (d.isstr)
+		printf("%s", d.u.str->s);
+	else
+		printf("%.8g", d.u.val);
+}
+
+void
+println(void)
 {
 	Datum d;
 
 	d = pop();
-	if (d.isstr)
-		printf("%s\n", d.u.str->s);
-	else
-		printf("%.8g\n", d.u.val);
-	return d;
-}
-
-void
-print(void)
-{
-	Datum d;
-
-	d = pr();
+	pr(d);
+	printf("\n");
 	if (prev.isstr)
 		dfree(prev.u.str);
 	if (d.isstr)
@@ -775,10 +776,181 @@ print(void)
 	prev = d;
 }
 
-void
-prexpr(void)
+/* free list got by poplist */
+static void
+freelist(Datum *p)
 {
-	(void)pr();
+	Datum *tmp;
+
+	while (p) {
+		tmp = p;
+		p = p->next;
+		free(tmp);
+	}
+}
+
+/* get narg data from stack in reverse order, get narg from pc */
+static Datum *
+poplist(void)
+{
+	Datum *tmp = NULL, *beg = NULL;
+	int narg;
+
+	narg = prog.pc->u.narg;
+	prog.pc = prog.pc->next;
+	while (narg-- > 0) {
+		if (stack == NULL) {
+			freelist(beg);
+			yyerror("stack underflow");
+		}
+		beg = stack;
+		stack = stack->next;
+		beg->next = tmp;
+		tmp = beg;
+	}
+	return beg;
+}
+
+/* print list of expressions, we get narg data in reverse order */
+void
+_print(void)
+{
+	Datum *beg, *p;
+
+	beg = poplist();
+	for (p = beg; p; p = p->next) {
+		pr(*p);
+		if (p->next)
+			printf(" ");
+		else
+			printf("\n");
+	}
+	freelist(beg);
+}
+
+/* printf-like conversions */
+static char *
+format(char *s, Datum *p)
+{
+	char buf[BUFSIZ];
+	char *fmt, *save, *t;
+	int n;
+
+	fmt = NULL;
+	t = buf; 
+	while (*s) {
+		if (t + 1 >= buf + sizeof buf)
+			goto error;
+		if (*s != '%') {
+			*t++ = *s++;
+			continue;
+		}
+		if (*(s+1) == '%') {
+			*t++ = '%';
+			s += 2;
+			continue;
+		}
+		save = s++;
+		while (strchr("#-+ 0", *s))
+			s++;
+		while (isdigit(*s))
+			s++;
+		if (*s == '.')
+			s++;
+		while (isdigit(*s))
+			s++;
+		if ((fmt = strndup(save, s - save + 1)) == NULL)
+			goto error;
+		switch (*s) {
+		case 'd':
+		case 'i':
+		case 'o':
+		case 'u':
+		case 'X':
+		case 'x':
+			/* int */
+			if (!p || p->isstr)
+				goto wrong;
+			n = snprintf(t, BUFSIZ - (t - buf), fmt, (int)p->u.val);
+			break;
+		case 'f':
+		case 'F':
+		case 'e':
+		case 'E':
+		case 'g':
+		case 'G':
+		case 'a':
+		case 'A':
+			/* double */
+			if (!p || p->isstr)
+				goto wrong;
+			n = snprintf(t, BUFSIZ - (t - buf), fmt, p->u.val);
+			break;
+		case 'c':
+			/* char */
+			if (!p || !p->isstr)
+				goto wrong;
+			n = snprintf(t, BUFSIZ - (t - buf), fmt, *p->u.str->s);
+			break;
+		case 's':
+			/* string */
+			if (!p || !p->isstr)
+				goto wrong;
+			n = snprintf(t, BUFSIZ - (t - buf), fmt, p->u.str->s);
+			break;
+		default:
+			if ((n = strlen(fmt)) < BUFSIZ - (t - buf))
+				strncpy(t, fmt, strlen(fmt));
+			else
+				goto error;
+			break;
+		}
+		s++;
+		if (n > BUFSIZ - (t - buf) + 1)
+			goto error;
+		t += n;
+		p = p->next;
+		free(fmt);
+		fmt = NULL;
+	}
+	*t = '\0';
+	if ((s = strdup(buf)) == NULL)
+		goto error;
+	return s;
+
+wrong:
+	free(fmt);
+	warning("wrong format");
+	return NULL;
+
+error:
+	free(fmt);
+	warning("out of memory");
+	return NULL;
+}
+
+/* print list of expressions, we get narg data in reverse order */
+void
+_printf(void)
+{
+	Datum *beg;
+	char *s;
+
+	if ((beg = poplist()) == NULL)
+		goto error;
+	if (!beg->isstr) {
+		warning("no format supplied");
+		goto error;
+	}
+	if ((s = format(beg->u.str->s, beg->next)) == NULL)
+		goto error;
+	printf("%s", s);
+	free(s);
+	freelist(beg);
+	return;
+
+error:
+	longjump();
 }
 
 void
