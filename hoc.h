@@ -2,7 +2,15 @@
 typedef struct String {
 	struct String *prev, *next;
 	char *s;
+	int isfinal;
 } String;
+
+/* datum content type */
+typedef union Value {
+	struct Symbol *sym;
+	struct String *str;
+	double val;
+} Value;
 
 /* symbol table entry */
 typedef struct Symbol {
@@ -10,21 +18,14 @@ typedef struct Symbol {
 	char *name;
 	int type;
 	int isstr;
-	union {
-		double val;
-		String *str;
-	} u;
+	union Value u;
 } Symbol;
 
 /* interpreter stack type */
 typedef struct Datum {
 	struct Datum *next;
 	int isstr;
-	union {
-		Symbol *sym;
-		String *str;
-		double val;
-	} u;
+	union Value u;
 } Datum;
 
 /* machine instruction type */
@@ -34,7 +35,7 @@ typedef struct Inst {
 	union {
 		double val;
 		String *str;
-		Symbol *sym;
+		struct Symbol *sym;
 		void (*opr)(void);
 		struct Inst *ip;
 		int narg;

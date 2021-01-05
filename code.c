@@ -11,8 +11,37 @@
 #include "symbol.h"
 #include "gramm.h"
 
-#define FREESTRING(p) { String *_##p; while(p) { _##p = p; p = p->next; free(_##p->s); free(_##p); }; p = NULL; }
-#define FREESTACK(p)  { Datum *_##p; while(p) { _##p = p; p = p->next; free(_##p); }; p = NULL; }
+#define FREEAUTO()  { \
+	String *tmp, *p = autostrings; \
+	while(p) { \
+		tmp = p; \
+		p = p->next; \
+		if (DEBUG) printf("FREE: %s\n", tmp->s); \
+		free(tmp->s); \
+		free(tmp); \
+		autostrings = NULL; \
+	} \
+}
+#define FREEFINAL()  { \
+	String *tmp, *p = finalstrings; \
+	while(p) { \
+		tmp = p; \
+		p = p->next; \
+		if (DEBUG) printf("FREE: %s\n", tmp->s); \
+		free(tmp->s); \
+		free(tmp); \
+		finalstrings = NULL; \
+	} \
+}
+#define FREESTACK()  { \
+	Datum *tmp, *p = stack; \
+	while(p) { \
+		tmp = p; \
+		p = p->next; \
+		free(tmp); \
+		stack = NULL; \
+	} \
+}
 
 /* function declaration, needed for bltins[] */
 static double Random(void);
@@ -115,7 +144,7 @@ static struct {
 
 /* the string list */
 static String *autostrings = NULL;      /* strings freed automatically after execution */
-static String *finaltrings = NULL;      /* strings that should be manually freed */
+static String *finalstrings = NULL;      /* strings that should be manually freed */
 
 /* flags */
 static int breaking, continuing;
@@ -130,13 +159,16 @@ addstr(char *s, int final)
 	String **list;
 	String *p;
 
-	if (final)
-		list = &finaltrings;
-	else
-		list = &autostrings;
 	if ((p = malloc(sizeof *p)) == NULL) {
 		free(s);
 		yyerror("out of memory");
+	}
+	if (final) {
+		list = &finalstrings;
+		p->isfinal = 1;
+	} else {
+		list = &autostrings;
+		p->isfinal = 0;
 	}
 	p->s = s;
 	if (*list)
@@ -183,8 +215,8 @@ prepare(void)
 	continuing = breaking = 0;
 	prog.tail = NULL;
 	prog.progp = prog.head;
-	FREESTRING(autostrings)
-	FREESTACK(stack);
+	FREEAUTO()
+	FREESTACK();
 }
 
 /* clean up machine */
@@ -192,9 +224,9 @@ void
 cleanup(void)
 {
 	cleansym();
-	FREESTRING(autostrings)
-	FREESTRING(finaltrings)
-	FREESTACK(stack)
+	FREEAUTO()
+	FREEFINAL()
+	FREESTACK()
 }
 
 /* debug the machine */
@@ -354,56 +386,40 @@ sympush(void)
 	push(d);
 }
 
-/* free String from datum, String should be listed on finaltrings! */
+/* free String from datum, String should be listed on finalstrings! */
 static void
-dfree(Datum d, int issym)
+dfree(String *str)
 {
-	String *str;
-
-	str = NULL;
-	if (issym) {
-		if (d.u.sym->isstr && d.u.sym->u.str)
-			str = d.u.sym->u.str;
-	} else {
-		if (d.isstr && d.u.str)
-			str = d.u.str;
-	}
-	if (!str)
-		return;
+	if (DEBUG)
+		printf("FREE: %s\n", str->s);
 	free(str->s);
 	if (str->next)
 		str->next->prev = str->prev;
 	if (str->prev)
 		str->prev->next = str->next;
 	else
-		finaltrings = str->next;
+		finalstrings = str->next;
 	free(str);
 }
 
-/* duplicate datum */
-static Datum
-ddup(Datum d, int issym, int final)
+/* move string from autostrings to finalstrings */
+static void
+movstr(String *str)
 {
-	Datum ret;
-	char *s;
-
-	if (issym) {
-		if ((d.isstr = d.u.sym->isstr)) {
-			d.u.str = d.u.sym->u.str;
-		} else {
-			d.u.val = d.u.sym->u.val;
-		}
-	}
-	if (d.isstr && d.u.str) {
-		if ((s = strdup(d.u.str->s)) == NULL)
-			yyerror("out of memory");
-		ret.u.str = addstr(s, final);
-		ret.isstr = 1;
-	} else {
-		ret.u.val = d.u.val;
-		ret.isstr = 0;
-	}
-	return ret;
+	if (str->isfinal)
+		return;
+	if (str->next)
+		str->next->prev = str->prev;
+	if (str->prev)
+		str->prev->next = str->next;
+	else
+		autostrings = str->next;
+	if (finalstrings)
+		finalstrings->prev = str;
+	str->next = finalstrings;
+	str->prev = NULL;
+	str->isfinal = 1;
+	finalstrings = str;
 }
 
 /* pop numeric value from stack */
@@ -535,7 +551,8 @@ eval(void)
 
 	d = pop();
 	verifyeval(d.u.sym);
-	d = ddup(d, 1, 0);
+	d.isstr = d.u.sym->isstr;
+	d.u = d.u.sym->u;
 	push(d);
 }
 
@@ -550,7 +567,8 @@ dsymnum(void)
 	prog.pc = prog.pc->next;
 	if (d.u.sym->isstr) {
 		v = atof(d.u.sym->u.str->s);
-		dfree(d, 1);
+		if (d.u.sym->isstr && prev.isstr && d.u.sym->u.str != prev.u.str)
+			dfree(d.u.sym->u.str);
 		d.u.sym->u.val = v;
 		d.u.sym->isstr = 0;
 	}
@@ -623,21 +641,18 @@ verifyassign(Symbol *s)
 void
 assign(void)
 {
-	Datum d, d1, d2;
+	Datum d1, d2;
 
 	d1 = pop();
 	d2 = pop();
 	verifyassign(d1.u.sym);
-	dfree(d1, 1);
+	if (d1.u.sym->isstr && prev.isstr && d1.u.sym->u.str != prev.u.str)
+		dfree(d1.u.sym->u.str);
 	d1.u.sym->isstr = d2.isstr;
-	if (d2.isstr) {
-		d = ddup(d2, 0, 1);
-		d1.u.sym->u.str = d.u.str;
-		d1.u.sym->isstr = 1;
-	} else {
-		d1.u.sym->u.val = d2.u.val;
-		d1.u.sym->isstr = 0;
-	}
+	if (d2.isstr)
+		movstr(d2.u.str);
+	d1.u.sym->u = d2.u;
+	d1.u.sym->isstr = d2.isstr;
 	d1.u.sym->type = VAR;
 	push(d2);
 }
@@ -729,14 +744,37 @@ pr(void)
 	return d;
 }
 
+/* duplicate datum */
+static Datum
+ddup(String *str)
+{
+	Datum d;
+	char *s;
+
+	if ((s = strdup(str->s)) == NULL)
+		yyerror("out of memory");
+	d.u.str = addstr(s, 1);
+	d.isstr = 1;
+	return d;
+}
+
 void
 print(void)
 {
 	Datum d;
 
-	dfree(prev, 0);
 	d = pr();
-	prev = ddup(d, 0, 1);
+	if (d.isstr) {
+		if (prev.isstr && d.u.str != prev.u.str)
+			dfree(prev.u.str);
+		if (d.u.str->isfinal && (!prev.isstr || prev.u.str != d.u.str))
+			d = ddup(d.u.str);
+		else
+			movstr(d.u.str);
+	} else if (prev.isstr) {
+		dfree(prev.u.str);
+	}
+	prev = d;
 }
 
 void

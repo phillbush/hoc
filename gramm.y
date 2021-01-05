@@ -74,6 +74,10 @@ asgn:
 	| VAR MULEQ expr        { $$ = $3; oprcode(sympush); symcode($1); oprcode(muleq); }
 	| VAR DIVEQ expr        { $$ = $3; oprcode(sympush); symcode($1); oprcode(diveq); }
 	| VAR MODEQ expr        { $$ = $3; oprcode(sympush); symcode($1); oprcode(modeq); }
+	| INC VAR               { $$ = oprcode(preinc); symcode($2); }
+	| DEC VAR               { $$ = oprcode(predec); symcode($2); }
+	| VAR INC               { $$ = oprcode(postinc); symcode($1); }
+	| VAR DEC               { $$ = oprcode(postdec); symcode($1); }
 	;
 
 stmt:
@@ -111,10 +115,6 @@ expr:
 	| expr EQ expr                  { oprcode(eq); }
 	| expr NE expr                  { oprcode(ne); }
 	| NOT expr                      { $$ = $2; oprcode(not); }
-	| INC VAR                       { $$ = oprcode(preinc); symcode($2); }
-	| DEC VAR                       { $$ = oprcode(predec); symcode($2); }
-	| VAR INC                       { $$ = oprcode(postinc); symcode($1); }
-	| VAR DEC                       { $$ = oprcode(postdec); symcode($1); }
 	| expr and expr end             { fill2($2, $3, $4); }
 	| expr or expr end              { fill2($2, $3, $4); }
 	| '-' expr %prec UNARYSIGN      { $$ = $2; oprcode(negate); }
