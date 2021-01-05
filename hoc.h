@@ -3,6 +3,7 @@ typedef struct String {
 	struct String *prev, *next;
 	char *s;
 	int isfinal;
+	size_t count;
 } String;
 
 /* datum content type */

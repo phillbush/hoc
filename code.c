@@ -67,38 +67,47 @@ static struct {
 	char *s;
 	void (*f)(void);
 } oprs[] = {
-	{"oprpop",    oprpop},
-	{"eval",      eval},
-	{"add",       add},
-	{"sub",       sub},
-	{"mul",       mul},
-	{"mod",       mod},
-	{"divd",      divd},
-	{"negate",    negate},
-	{"power",     power},
-	{"assign",    assign},
-	{"addeq",     addeq},
-	{"subeq",     subeq},
-	{"muleq",     muleq},
-	{"diveq",     diveq},
-	{"modeq",     modeq},
-	{"bltin",     bltin},
-	{"sympush",   sympush},
-	{"constpush", constpush},
-	{"print",     print},
-	{"prexpr",    prexpr},
-	{"gt",        gt},
-	{"ge",        ge},
-	{"lt",        lt},
-	{"le",        le},
-	{"eq",        eq},
-	{"ne",        ne},
-	{"and",       and},
-	{"or",        or},
-	{"not",       not},
-	{"ifcode",    ifcode},
-	{"whilecode", whilecode},
-	{NULL,        NULL},
+	{"oprpop",       oprpop},
+	{"eval",         eval},
+	{"add",          add},
+	{"sub",          sub},
+	{"mul",          mul},
+	{"mod",          mod},
+	{"divd",         divd},
+	{"negate",       negate},
+	{"power",        power},
+	{"assign",       assign},
+	{"addeq",        addeq},
+	{"subeq",        subeq},
+	{"muleq",        muleq},
+	{"diveq",        diveq},
+	{"modeq",        modeq},
+	{"preinc",       preinc},
+	{"predec",       predec},
+	{"postinc",      postinc},
+	{"postdec",      postdec},
+	{"sympush",      sympush},
+	{"constpush",    constpush},
+	{"prevpush",     prevpush},
+	{"strpush",      strpush},
+	{"print",        print},
+	{"prexpr",       prexpr},
+	{"gt",           gt},
+	{"ge",           ge},
+	{"lt",           lt},
+	{"le",           le},
+	{"eq",           eq},
+	{"ne",           ne},
+	{"and",          and},
+	{"or",           or},
+	{"not",          not},
+	{"ifcode",       ifcode},
+	{"whilecode",    whilecode},
+	{"forcode",      forcode},
+	{"breakcode",    breakcode},
+	{"continuecode", continuecode},
+	{"bltin",        bltin},
+	{NULL,           NULL}
 };
 
 /* table of bltins functions */
@@ -175,6 +184,7 @@ addstr(char *s, int final)
 		(*list)->prev = p;
 	p->next = *list;
 	p->prev = NULL;
+	p->count = 1;
 	*list = p;
 	return p;
 }
@@ -185,6 +195,8 @@ oprname(void (*opr)(void))
 {
 	int i;
 
+	if (opr == NULL)
+		return "STOP";
 	for (i = 0; oprs[i].f; i++)
 		if (opr == oprs[i].f)
 			return oprs[i].s;
@@ -236,7 +248,7 @@ debug(void)
 	Inst *p;
 	size_t n;
 
-	for (n = 0, p = prog.head; p; n++, p = p->next) {
+	for (n = 0, p = prog.head; p && p != prog.progp; n++, p = p->next) {
 		fprintf(stderr, "%03zu: ", n);
 		switch (p->type) {
 		case NARG:
@@ -390,36 +402,43 @@ sympush(void)
 static void
 dfree(String *str)
 {
-	if (DEBUG)
-		printf("FREE: %s\n", str->s);
-	free(str->s);
-	if (str->next)
-		str->next->prev = str->prev;
-	if (str->prev)
-		str->prev->next = str->next;
-	else
-		finalstrings = str->next;
-	free(str);
+	if (str->count > 1) {
+		str->count--;
+	} else {
+		if (DEBUG)
+			printf("FREE: %s\n", str->s);
+		free(str->s);
+		if (str->next)
+			str->next->prev = str->prev;
+		if (str->prev)
+			str->prev->next = str->next;
+		else
+			finalstrings = str->next;
+		free(str);
+	}
 }
 
 /* move string from autostrings to finalstrings */
 static void
 movstr(String *str)
 {
-	if (str->isfinal)
-		return;
-	if (str->next)
-		str->next->prev = str->prev;
-	if (str->prev)
-		str->prev->next = str->next;
-	else
-		autostrings = str->next;
-	if (finalstrings)
-		finalstrings->prev = str;
-	str->next = finalstrings;
-	str->prev = NULL;
-	str->isfinal = 1;
-	finalstrings = str;
+	if (str->isfinal) {
+		str->count++;
+	} else {
+		if (str->next)
+			str->next->prev = str->prev;
+		if (str->prev)
+			str->prev->next = str->next;
+		else
+			autostrings = str->next;
+		if (finalstrings)
+			finalstrings->prev = str;
+		str->next = finalstrings;
+		str->prev = NULL;
+		str->isfinal = 1;
+		str->count = 1;
+		finalstrings = str;
+	}
 }
 
 /* pop numeric value from stack */
@@ -567,8 +586,7 @@ dsymnum(void)
 	prog.pc = prog.pc->next;
 	if (d.u.sym->isstr) {
 		v = atof(d.u.sym->u.str->s);
-		if (d.u.sym->isstr && prev.isstr && d.u.sym->u.str != prev.u.str)
-			dfree(d.u.sym->u.str);
+		dfree(d.u.sym->u.str);
 		d.u.sym->u.val = v;
 		d.u.sym->isstr = 0;
 	}
@@ -646,7 +664,7 @@ assign(void)
 	d1 = pop();
 	d2 = pop();
 	verifyassign(d1.u.sym);
-	if (d1.u.sym->isstr && prev.isstr && d1.u.sym->u.str != prev.u.str)
+	if (d1.u.sym->isstr)
 		dfree(d1.u.sym->u.str);
 	d1.u.sym->isstr = d2.isstr;
 	if (d2.isstr)
@@ -744,36 +762,16 @@ pr(void)
 	return d;
 }
 
-/* duplicate datum */
-static Datum
-ddup(String *str)
-{
-	Datum d;
-	char *s;
-
-	if ((s = strdup(str->s)) == NULL)
-		yyerror("out of memory");
-	d.u.str = addstr(s, 1);
-	d.isstr = 1;
-	return d;
-}
-
 void
 print(void)
 {
 	Datum d;
 
 	d = pr();
-	if (d.isstr) {
-		if (prev.isstr && d.u.str != prev.u.str)
-			dfree(prev.u.str);
-		if (d.u.str->isfinal && (!prev.isstr || prev.u.str != d.u.str))
-			d = ddup(d.u.str);
-		else
-			movstr(d.u.str);
-	} else if (prev.isstr) {
+	if (prev.isstr)
 		dfree(prev.u.str);
-	}
+	if (d.isstr)
+		movstr(d.u.str);
 	prev = d;
 }
 
