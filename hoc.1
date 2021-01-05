@@ -198,6 +198,9 @@ A print statement consists of the word
 .B print
 followed by a comma\-delimited list of expressions.
 A print statement prints the value of each expression separated by a space and ending with a newline.
+A print statement does not cause the
+.B .
+(period) variable to be updated.
 .PP
 A printf statement consists of a word
 .B printf
@@ -205,6 +208,9 @@ followed by a comma\-delimited list of expressions.
 The first expression (called format) must be a format string as specified in
 .IR printf (1),
 and the following expressions must match in number the number of format specifications in the format.
+A printf statement does not cause the
+.B .
+(period) variable to be updated.
 .PP
 The following is a list of control flow statements.
 .TP
