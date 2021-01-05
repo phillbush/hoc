@@ -43,7 +43,6 @@ shell with history support.
 § TODO
 
 • Implement a full stage-6 hoc.
-• Write the manual.
 • Add a facility to execute system commands from within hoc (and assign
   their output to variables) (exercise 8-7).
 • Turn symbol table into a hash table?

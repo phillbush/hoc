@@ -1,0 +1,322 @@
+.TH HOC 1
+.SH NAME
+hoc \- interpreter for floating point arithmetic language
+.SH SYNOPSIS
+.B hoc
+.RI [ file ]
+.SH DESCRIPTION
+.B Hoc
+interprets a simple language for floating point arithmetic, at about the level of BASIC.
+It has C-style control flow, function definition and the usual numerical built-in functions
+such as cosine and logarithm.
+.PP
+.B Hoc
+reads input from its standard input by default.
+If a filename is specified as argument, input is read from this file instead.
+If filename is
+.B \-
+(a dash), input is read from standard input instead.
+.PP
+.B Hoc
+provides no interactive command line editing features.
+For using those features, use a shell wrapper, such as
+.IR rlwrap (1).
+.PP
+.B Hoc
+input consists of
+.I expressions
+and
+.IR statements .
+Expressions are evaluated and their results printed
+(except assignment expressions, whose result are not printed).
+Statements, typically control flow statements and function or procedure definitions,
+produce no output unless they explicitly call
+.IR print .
+Blank lines and comments (contained between # and the next newline) are ignored.
+.SS Expressions
+An expression can be a number constant, a string literal, a variable name, a function call,
+or a compound expression (made of expressions and operators).
+An expression can be surrounded by parentheses
+(in order to change the precedence of its operators, for example).
+A sequence of expressions can be written delimited with a , (comma).
+Every expression has a numeric or string value;
+if a string value is used where a numeric value is expected,
+this string is first converted to number using
+.IR atof (3).
+A sequence of expressions always has the value of the last expression.
+logical expressions have value 1.0 (true) and 0.0 (false).
+As in C, any nonzero value is taken to be true.
+.PP
+Number constants can be expressed in the decimal notation (12.345),
+or in the decimal scientific notation (12.345e-67).
+.PP
+String literals are strings of characters surrounded by double quotes.
+Backslash escapes are used to include a special character in a string.
+The following is a list of supported backslash escapes and the character they represent.
+.TP
+.B \e\e
+Literal backslash.
+.TP
+.B \e\(dq
+Double quote.
+.TP
+.B \e\(aq
+Single quote.
+.TP
+.B \ea
+Alert (bell).
+.TP
+.B \eb
+Backspace.
+.TP
+.B \ef
+Form feed.
+.TP
+.B \en
+Newline (line feed).
+.TP
+.B \er
+Carriage return.
+.TP
+.B \et
+Horizontal tab.
+.TP
+.B \ev
+Vertical tab.
+.PP
+Variable names consist of alpha-numeric characters and the symbol _ (underscore),
+but cannot begin with a number, and cannot have the same name as a statment keyword or a function.
+There is an exception to this rule: 
+the special variable . (period), which cannot be assigned to and always evaluates to the last printed value.
+Variables can be assigned with one of the assignment operators,
+but cannot be used in a non\-assignment expression unless previously defined.
+.PP
+Function calls consist of a function name
+followed by a comma-delimited list of arguments in parentheses (fun(a, b, c)).
+All function arguments are passed by value, including strings.
+A function can be nullary (have no argument), unary (have one arguments), binary (have two arguments), etc.
+A nullary function must be followed by an empty list of arguments (such as fun()).
+Some functions, called built-in functions, are already defined in hoc; they are listed bellow.
+.TP
+.B deg()
+Returns the constant value of pi.
+.TP
+.B e()
+Returns the constant value of the base of natural logarithms.
+.TP
+.B gamma()
+Returns the constant value of the Euler-Mascheroni constant.
+.TP
+.B phi()
+Returns the constant value of the golden ratio.
+.TP
+.B pi()
+Returns the constant value of pi.
+.TP
+.B rand()
+Returns a random value between 0 and 1.
+.TP
+.B abs(x)
+Returns the absolute value of x.
+.TP
+.B atan(x)
+Returns the arctangent of x.
+.TP
+.B cos(x)
+Returns the cosine of x.
+.TP
+.B exp(x)
+Returns the exponential of x.
+.TP
+.B int(x)
+Returns the integer part of x, truncated towards zero.
+.TP
+.B log(x)
+Returns the natural logarithm of x.
+.TP
+.B log10(x)
+Returns the logarithm base 10 of x.
+.TP
+.B sin(x)
+Returns the sin of x.
+.TP
+.B sqrt(x)
+Returns the square root of x.
+.TP
+.B atan2(y, x)
+Returns the angle whose tangent is y/x.
+.PP
+Operators can be used to create a new expression from existing ones.
+An operator can be unary (use a single expression) or binary (use two expressions).
+The operators, in decreasing order of precedence, are listed below;
+operators listed together have the same precedence.
+All operators are binary and associate from left to right, unless explicitly stated otherwise;
+.TP
+.B ^
+(right associative)
+Exponentiation.
+.TP
+.B ! \- + \-\- ++
+(unary, right associative)
+Logical negation, unary minus, unary plus, decrement operator, and increment operator.
+The decrement and increment operators have the prefix and postfix form.
+.TP
+.B * / %
+Multiplication, division, and modulus.
+.TP
+.B + \-
+Addition and subtraction.
+.TP
+.B < >= < <=
+Relational operators (greater than, greater than or equal, less than, and less than or equal).
+.TP
+.B == !=
+Equality operators (equal to, and not equal to).
+As is always the case with floating point numbers,
+equality comparisons are inherently suspect.
+.TP
+.B &&
+Logical AND.
+.TP
+.B ||
+Logical OR.
+.TP
+.B = += -= *= /= %=
+(right associative)
+Assignment operators.
+They all return the result of the assignment.
+.TP
+.B ,
+Comma (used to group expressions).
+.SS Statements
+A statement can be an expression, a compound statement, a print statement,
+a control flow statement, or a procedure or function definition statement.
+A statement must be terminated by a newline or a semi-colon.
+A compound statement is a list of statements enclosed in curly braces (this list can be empty).
+.PP
+A print statement consists of the word
+.B print
+followed by a comma\-delimited list of expressions.
+A print statement prints the value of each expression.
+.PP
+The following is a list of control flow statements.
+.TP
+.B break
+A break statement may appear only within an iteration statement
+and causes the innermost enclosing loop statement to end.
+.TP
+.B continue
+A continue statement may appear only within a loop statement
+and causes control to pass to the loop-continuation portion
+of the innermost enclosing loop statement.
+.TP
+.B for (EXPR1; EXPR2; EXPR3) STMT
+A for statement is a loop statement that evaluates EXPR1,
+and then passes control to STMT repeatedly so long as EXPR2 evaluates to nonzero (true);
+EXPR3 is evaluated after each iteration.
+EXPR1 can be omitted, in which case no expression is evaluated before the loop begins.
+EXPR2 can be omitted, in which case the loops runs ad infinitum.
+EXPR3 can be omitted, in which case no expression is evaluated after each iteration.
+In any case, if any expression is omitted, all semi-colons must be present.
+.TP
+.B if (EXPR) STMT
+An if statement is a selection statement that causes the control to pass
+to the statement STMT if the expression EXPR is nonzero.
+.TP
+.B if (EXPR1) STMT1 else (EXPR2) STMT2
+An if-else statement is a selection statement that causes the control to pass
+to the statement STMT1 if the expression EXPR1 is nonzero,
+or to STMT2 if EXPR1 is zero and EXPR2 is nonzero.
+.TP
+.B while (EXPR) STMT
+A while statement is a loop statement
+that passes control to STMT repeatedly so long as EXPR evaluates to nonzero (true).
+.PP
+Procedure and function definition statements.
+.br
+TODO.
+.SH EXIT STATUS
+.TP
+.B 0
+Success.
+.TP
+.B >0
+Error occurred.
+.SH EXAMPLES
+The example below shows an interactive session of
+.BR hoc .
+The output is listed indented.
+.IP
+.EX
+1+2*3
+	7
+angle=pi()/3
+r=sin(angle)
+r
+	0.866025
+r*2
+	1.73205
+.EE
+.SH SEE ALSO
+.IR bc (1),
+.IR dc (1)
+.PP
+Brian W. Kernighan, and Rob Pike,
+.IR "The UNIX Programming Environment" ,
+Prentice Hall, 1984.
+.SH HISTORY
+A
+.B hoc
+utility first appeared in the book The UNIX Programming Environment
+by Brian Kernighan and Rob Pike.
+.PP
+The following is a list of extensions of this implementation,
+that do not appear in the book, or appear in the book as an exercise.
+.IP \(bu 2
+The modulus and unary plus operators.
+.IP \(bu 2
+The . (period) variable, which evaluates to the last printed value.
+.IP \(bu 2
+Semicolons as statement terminators.
+.IP \(bu 2
+The rand() and the atan(y,x) built-in functions.
+.IP \(bu 2
+The assignment operators
+.BR += ", " -= ", " *= ", " /= ", and " %= .
+.IP \(bu 2
+The increment and decrement operators
+.B ++
+and
+.BR -- .
+.IP \(bu 2
+Short-circuit evaluation of the logical operators
+.B &&
+and
+.B || 
+(in the book, both sides of the operator are always evaluated,
+as it had no left-to-right evaluation or early termination).
+.IP \(bu 2
+The
+.B for
+control\-flow statement, with expressions that can be omitted.
+.IP \(bu 2
+The
+.B break
+and
+.B continue
+control\-flow statements.
+.IP \(bu 2
+Support for comments.
+.IP \(bu 2
+Support for expression list (list of expressions separated by comma).
+.IP \(bu 2
+Support for assigning strings to variables.
+.IP \(bu 2
+Support for converting strings to numbers.
+.SH BUGS
+Different from the book, this implementation does not have constant values, such as PI.
+There are, instead, correspondent nullary functions, such as pi().
+.PP
+This implementation does not support input (yet).
+.PP
+This implementation does not support function or procedure definition (yet).
