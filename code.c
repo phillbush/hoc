@@ -11,6 +11,9 @@
 #include "symbol.h"
 #include "gramm.h"
 
+#define FREESTRING(p) { String *_##p; while(p) { _##p = p; p = p->next; free(_##p->s); free(_##p); }; p = NULL; }
+#define FREESTACK(p)  { Datum *_##p; while(p) { _##p = p; p = p->next; free(_##p); }; p = NULL; }
+
 /* function declaration, needed for bltins[] */
 static double Random(void);
 static double Integer(double);
@@ -112,7 +115,7 @@ static struct {
 
 /* the string list */
 static String *autostrings = NULL;      /* strings freed automatically after execution */
-static String *statstrings = NULL;      /* strings that should be manually freed */
+static String *finaltrings = NULL;      /* strings that should be manually freed */
 
 /* flags */
 static int breaking, continuing;
@@ -128,7 +131,7 @@ addstr(char *s, int final)
 	String *p;
 
 	if (final)
-		list = &statstrings;
+		list = &finaltrings;
 	else
 		list = &autostrings;
 	if ((p = malloc(sizeof *p)) == NULL) {
@@ -175,51 +178,23 @@ init(void)
 
 /* initialize for code generation */
 void
-initcode(void)
+prepare(void)
 {
 	continuing = breaking = 0;
 	prog.tail = NULL;
 	prog.progp = prog.head;
-}
-
-/* clean up allocated memory from previous execution */
-void
-cleancode(void)
-{
-	String *sp, *sq;
-	Datum *dp, *dq;
-
-	sp = autostrings;
-	while (sp) {
-		sq = sp;
-		sp = sp->next;
-		free(sq->s);
-		free(sq);
-	}
-	autostrings = NULL;
-	dp = stack;
-	while (dp) {
-		dq = dp;
-		dp = dp->next;
-		free(dq);
-	}
-	stack = NULL;
+	FREESTRING(autostrings)
+	FREESTACK(stack);
 }
 
 /* clean up machine */
 void
 cleanup(void)
 {
-	String *p, *tmp;
-
 	cleansym();
-	p = statstrings;
-	while (p) {
-		tmp = p;
-		p = p->next;
-		free(tmp->s);
-		free(tmp);
-	}
+	FREESTRING(autostrings)
+	FREESTRING(finaltrings)
+	FREESTACK(stack)
 }
 
 /* debug the machine */
@@ -379,7 +354,7 @@ sympush(void)
 	push(d);
 }
 
-/* free String from datum, String should be listed on statstrings! */
+/* free String from datum, String should be listed on finaltrings! */
 static void
 dfree(Datum d, int issym)
 {
@@ -397,11 +372,11 @@ dfree(Datum d, int issym)
 		return;
 	free(str->s);
 	if (str->next)
-		str->next = str->prev;
+		str->next->prev = str->prev;
 	if (str->prev)
 		str->prev->next = str->next;
 	else
-		statstrings = str;
+		finaltrings = str->next;
 	free(str);
 }
 
@@ -653,6 +628,7 @@ assign(void)
 	d1 = pop();
 	d2 = pop();
 	verifyassign(d1.u.sym);
+	dfree(d1, 1);
 	d1.u.sym->isstr = d2.isstr;
 	if (d2.isstr) {
 		d = ddup(d2, 0, 1);

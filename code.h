@@ -13,8 +13,7 @@ String *addstr(char *, int);
 
 /* routines called by main.o */
 void init(void);
-void initcode(void);
-void cleancode(void);
+void prepare(void);
 void cleanup(void);
 void debug(void);
 void execute(Inst *);

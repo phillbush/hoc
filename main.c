@@ -58,11 +58,10 @@ main(int argc, char *argv[])
 
 	/* parse and execute input until EOF */
 	setjmp(begin);
-	while (initcode(), yyparse()) {
+	while (prepare(), yyparse()) {
 		if (DEBUG)
 			debug();
 		execute(NULL);
-		cleancode();
 	}
 
 	/* cleanup machine and close input file */

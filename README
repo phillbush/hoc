@@ -125,17 +125,16 @@ Use cat(1).
 
 § HOW IT WORKS
 
-Before parsing and execution begins, the symbol table is populated.
-Calls to the function install() installs both keywords and built-in
-functions in the symbol table.
+Before parsing and execution begins, the machine is initialized and the
+symbol table is populated by init().  Calls to the function install()
+installs both keywords and built-in functions in the symbol table.
 
-The main loop initiates the stack machine (by cleaning the stack and the
-program memory) and parses the input, one statement at a time, until the
-end of the input file.  While the input is parsed, code is generated for
-later execution by calls to the function `code()`,  which simply puts an
-`Inst` data  (see bellow)  into the next free spot in the program memory
-(pointed by `progp`).  Once a statement is parsed, the generated code is
-printed (if DEBUG is set) and executed.
+The main loop reverts the stack machine to its initial state and parses
+the input, one statement at a time.  While the input is parsed, code is
+generated for later execution by calls to the function `code()`,  which
+simply puts an `Inst` data  (see bellow) into the next free spot in the
+program memory (pointed by `prog.progp`).   Once a statement is parsed,
+the generated code is printed if DEBUG is set and then executed.
 
 For example, to handle the assignment `x = 2 * y`, the following code
 is generated.  When this code is executed, the expression is evaluated
@@ -163,28 +162,35 @@ The machine itself is a list of entries of data of type `Inst`.   An
 to routines like `mul` that perform an arithmetic operation; or pointer
 to a entry in the symbol table; or a floating point number (for constant
 values); or a pointer to another entry in the machine (used by control
-flow statements, for example).
+flow statements), a string, etc.
 
 Execution of the machine is simple.  Each cycle calls `execute()`,
 which executes the function pointed to by the instruction pointed
-to by the program counter `pc`, and increments `pc` so it's ready
-for the next instruction.  An NULL instruction terminates the loop.
-Some instructions also increment `pc` to step over any arguments
-that follows the instruction.
+to by the program counter `prog.pc`, and makes `prog.pc` point to
+the next instruction so it's ready for the next instruction.   An
+NULL instruction terminates the execution. Some instructions also
+increment `prog.pc` to step over any arguments that follows the
+instruction.
 
 The code generated for while and if needs particular study.  When the
-keyword `while`is encountered, the operation whilecode() is generated,
+keyword `while` is encountered, the operation whilecode() is generated,
 and its position in the machine is returned as the value of the while
-production. At the same time, however, the two following positions in
+production.  At the same time, however, the two following positions in
 the machine are also reserved, to be filled in later.   The next code
 generated is the expression that makes up the condition part of the
 `while`.  After the whole `while` statement has been recognized, the
 two extra positions reserved after the `whilecode` instruction are
 filled with pointers to the locations of the loop body and the statement
-that follows the loop.  Code generated for `if` works similar.
+that follows the loop.  Code generated for `for` and `if` works similar.
 
 You can compile with -DDEBUG=1 for hoc to print the generated machine
 code after it is generated.
+
+Strings are allocated in two linked-lists of strings.  `autostrings`
+contains strings that appears during evaluation as the result of an
+expression.  Strings in `autostrings` are freed after each execution.
+`finalstrings` contain strings that are the value of a variable, and
+thus should not be freed.
 
 
 § SEE ALSO

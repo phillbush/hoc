@@ -53,7 +53,7 @@ int yylex(void);
 %left  GT GE LT LE
 %left  '+' '-'
 %left  '*' '/' '%'
-%left  UNARYSIGN NOT INC DEC
+%right UNARYSIGN NOT INC DEC
 %right '^'
 
 %%
