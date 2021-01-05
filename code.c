@@ -58,6 +58,8 @@ static struct {
 	{"while",       WHILE},
 	{"print",       PRINT},
 	{"printf",      PRINTF},
+	{"read",        READ},
+	{"getline",     GETLINE},
 	{"for",         FOR},
 	{"break",       BREAK},
 	{"continue",    CONTINUE},
@@ -95,6 +97,9 @@ static struct {
 	{"println",      println},
 	{"print",        _print},
 	{"printf",       _printf},
+	{"sprintf",      _sprintf},
+	{"readnum",      readnum},
+	{"readline",     readline},
 	{"gt",           gt},
 	{"ge",           ge},
 	{"lt",           lt},
@@ -987,6 +992,53 @@ _sprintf(void)
 error:
 	freelist(beg);
 	longjump();
+}
+
+/* read number into variable */
+void
+readnum(void)
+{
+	Datum d;
+	Symbol *sym;
+	char buf[BUFSIZ];
+
+	sym = prog.pc->u.sym;
+	prog.pc = prog.pc->next;
+	if (fgets(buf, sizeof buf, stdin)) {
+		d.u.val = 1.0;
+		sym->isstr = 0;
+		sym->u.val = atof(buf);
+		sym->type = VAR;
+	} else {
+		d.u.val = 0.0;
+	}
+	d.isstr = 0;
+	push(d);
+}
+
+/* read into variable */
+void
+readline(void)
+{
+	Datum d;
+	Symbol *sym;
+	char buf[BUFSIZ];
+	char *s;
+
+	sym = prog.pc->u.sym;
+	prog.pc = prog.pc->next;
+	if (fgets(buf, sizeof buf, stdin)) {
+		d.u.val = 1.0;
+		if ((s = strdup(buf)) == NULL)
+			yyerror("out of memory");
+		sym->isstr = 1;
+		sym->u.str = addstr(s, 1);
+		sym->type = VAR;
+	} else {
+		d.u.val = 0.0;
+	}
+	d.isstr = 0;
+	push(d);
 }
 
 void

@@ -46,7 +46,6 @@ shell with history support.
 • Add a facility to execute system commands from within hoc (and assign
   their output to variables) (exercise 8-7).
 • Turn symbol table into a hash table?
-• Add expression `read`.
 • Add string concatenation.
 • Add support for functions.
 • Add option -e to read code from command-line.
@@ -117,6 +116,9 @@ The `print` statement in this version of hoc actually works like
 awk(1)'s `print` statement (separates each argument with a space,
 and prints a newline at the end).  As awk(1), this tersion of hoc(1)
 also has a `printf` statement and a `sprintf()` built-in function.
+
+getline
+The `getline VAR` expression reads a line into the variable VAR.
 
 
 § NON-FEATURES

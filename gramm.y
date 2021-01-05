@@ -41,7 +41,7 @@ int yylex(void);
 
 %token <str>  STRING
 %token <val>  NUMBER PREVIOUS
-%token <sym>  VAR BLTIN UNDEF PRINT PRINTF WHILE IF ELSE FOR BREAK CONTINUE
+%token <sym>  VAR BLTIN UNDEF PRINT PRINTF WHILE IF ELSE FOR BREAK CONTINUE READ GETLINE
 %type  <narg> args arglist
 %type  <inst> expr exprlist stmt stmtlist asgn
 %type  <inst> and or while if cond forcond forloop begin end
@@ -103,6 +103,8 @@ expr:
 	| STRING                        { $$ = oprcode(strpush); strcode($1); }
 	| PREVIOUS                      { $$ = oprcode(prevpush); }
 	| VAR                           { $$ = oprcode(sympush); symcode($1); oprcode(eval); }
+	| READ VAR                      { oprcode(readnum); symcode($2); }
+	| GETLINE VAR                   { oprcode(readline); symcode($2); }
 	| expr '+' expr                 { oprcode(add); }
 	| expr '-' expr                 { oprcode(sub); }
 	| expr '*' expr                 { oprcode(mul); }
