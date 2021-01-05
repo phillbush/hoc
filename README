@@ -112,12 +112,11 @@ This version of hoc(1) supports list of expressions separated by comma,
 for example in the for condition `for (i = 0, j = 1; i < 3; i++, j++)`.
 The value of a expression list is that of the rightmost expression.
 
-print and printf.
+print, printf and sprintf().
 The `print` statement in this version of hoc actually works like
 awk(1)'s `print` statement (separates each argument with a space,
-and prints a newline at the end).  As awk(1), This tersion of hoc(1)
-also has a `printf` statement; that works like this:
-printf "%-07d\t%s\n", num, str
+and prints a newline at the end).  As awk(1), this tersion of hoc(1)
+also has a `printf` statement and a `sprintf()` built-in function.
 
 
 § NON-FEATURES
