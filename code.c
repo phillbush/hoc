@@ -124,6 +124,7 @@ static struct {
 		double (*f2)(double, double);
 	} u;
 } bltins[] = {
+	{"sprintf", -2, .u.d = 0.0},    /* special bltin function, must be first */
 	{"pi",      -1, .u.d = M_PI},
 	{"e",       -1, .u.d = M_E},
 	{"gamma",   -1, .u.d = 0.57721566490153286060},
@@ -210,6 +211,7 @@ oprname(void (*opr)(void))
 void
 init(void)
 {
+	Symbol *sym;
 	int i;
 
 	if ((prog.head = malloc(sizeof *prog.head)) == NULL)
@@ -219,8 +221,10 @@ init(void)
 	srand(time(NULL));
 	for (i = 0; keywords[i].s; i++)
 		install(keywords[i].s, keywords[i].v);
-	for (i = 0; bltins[i].s; i++)
-		install(bltins[i].s, BLTIN);
+	for (i = 0; bltins[i].s; i++) {
+		sym = install(bltins[i].s, BLTIN);
+		sym->u.bltin = i;
+	}
 }
 
 /* initialize for code generation */
@@ -789,7 +793,7 @@ freelist(Datum *p)
 	}
 }
 
-/* get narg data from stack in reverse order, get narg from pc */
+/* get narg data from stack in reverse order */
 static Datum *
 poplist(void)
 {
@@ -811,7 +815,7 @@ poplist(void)
 	return beg;
 }
 
-/* print list of expressions, we get narg data in reverse order */
+/* print list of expressions */
 void
 _print(void)
 {
@@ -929,7 +933,7 @@ error:
 	return NULL;
 }
 
-/* print list of expressions, we get narg data in reverse order */
+/* print formated list of expressions */
 void
 _printf(void)
 {
@@ -950,6 +954,38 @@ _printf(void)
 	return;
 
 error:
+	freelist(beg);
+	longjump();
+}
+
+/* push formated string onto stack */
+void
+_sprintf(void)
+{
+	String *str;
+	Datum d, *beg;
+	char *s;
+
+	if ((beg = poplist()) == NULL)
+		goto error;
+	if (!beg->isstr) {
+		warning("no format supplied");
+		goto error;
+	}
+	if ((s = format(beg->u.str->s, beg->next)) == NULL)
+		goto error;
+	if ((str = addstr(s, 0)) == NULL) {
+		warning("out of memory");
+		goto error;
+	}
+	freelist(beg);
+	d.isstr = 1;
+	d.u.str = str;
+	push(d);
+	return;
+
+error:
+	freelist(beg);
 	longjump();
 }
 
@@ -1195,11 +1231,13 @@ bltin(void)
 
 	sym = prog.pc->u.sym;
 	prog.pc = prog.pc->next;
+	i = sym->u.bltin;
+	if (i == 0) {   /* sprintf */
+		_sprintf();
+		return;
+	}
 	narg = prog.pc->u.narg;
 	prog.pc = prog.pc->next;
-	for (i = 0; bltins[i].s; i++)
-		if (strcmp(sym->name, bltins[i].s) == 0)
-			break;
 	if (narg == 0 && bltins[i].n == -1)
 		narg = -1;
 	if (narg != bltins[i].n)

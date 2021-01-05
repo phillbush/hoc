@@ -48,7 +48,6 @@ shell with history support.
 • Turn symbol table into a hash table?
 • Add expression `read`.
 • Add string concatenation.
-• Add `sprintf()` builtin function.
 • Add support for functions.
 • Add option -e to read code from command-line.
 

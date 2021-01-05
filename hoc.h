@@ -11,6 +11,7 @@ typedef union Value {
 	struct Symbol *sym;
 	struct String *str;
 	double val;
+	int bltin;
 } Value;
 
 /* symbol table entry */

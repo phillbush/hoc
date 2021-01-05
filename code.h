@@ -49,6 +49,7 @@ void strpush(void);
 void println(void);
 void _print(void);
 void _printf(void);
+void _sprintf(void);
 void gt(void);
 void ge(void);
 void lt(void);
