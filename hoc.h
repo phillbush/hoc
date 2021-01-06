@@ -43,3 +43,17 @@ typedef struct Inst {
 		int narg;
 	} u;
 } Inst;
+
+/* procedure/function definition type */
+typedef struct Function {
+	struct Inst *code;
+	struct Symbol **args;
+	size_t nargs;
+} Function;
+
+/* procedure/function call stack frame */
+typedef struct Frame {
+	struct Frame *prev, *next;
+	struct Symbol *symtab;          /* local symbol table */
+	struct Int *retpc;              /* where to resume after return */
+} Frame;

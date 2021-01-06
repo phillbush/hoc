@@ -11,7 +11,6 @@ ES      (\\(['"\?\\abfnrtv]|[0-7]{1,3}|x[a-fA-F0-9]+))
 #include "hoc.h"
 #include "code.h"
 #include "error.h"
-#include "symbol.h"
 #include "gramm.h"
 
 static int makenum(char *yytext);

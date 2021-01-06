@@ -41,7 +41,10 @@ int yylex(void);
 
 %token <str>  STRING
 %token <val>  NUMBER PREVIOUS
-%token <sym>  VAR BLTIN UNDEF PRINT PRINTF WHILE IF ELSE FOR BREAK CONTINUE READ GETLINE
+%token <sym>  VAR BLTIN UNDEF
+%token <sym>  PRINT PRINTF READ GETLINE
+%token <sym>  WHILE IF ELSE FOR BREAK CONTINUE
+%token <sym>  FUNC PROC FUNCTION PROCEDURE
 %type  <narg> args arglist
 %type  <inst> expr exprlist stmt stmtlist asgn
 %type  <inst> and or while if cond forcond forloop begin end

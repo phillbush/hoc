@@ -10,6 +10,8 @@
 
 /* routines called by lex.o */
 String *addstr(char *, int);
+Symbol *lookup(const char *s);
+Symbol *install(const char *s, int t);
 
 /* routines called by main.o */
 void init(void);

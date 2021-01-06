@@ -1,5 +1,5 @@
 PROG = hoc
-OBJS = main.o error.o symbol.o code.o gramm.o lex.o
+OBJS = main.o error.o code.o gramm.o lex.o
 
 CC = cc
 LEX = lex
@@ -14,11 +14,10 @@ LDFLAGS = ${LDLIBS}
 all: ${PROG}
 
 ${OBJS}:  hoc.h
-code.o:   code.h error.h symbol.h gramm.h
-lex.o:    code.h error.h symbol.h gramm.h
+code.o:   code.h error.h gramm.h
+lex.o:    code.h error.h gramm.h
 gramm.o:  code.h error.h
 main.o:   code.h
-symbol.o: error.h
 error.o:
 
 ${PROG}: ${OBJS}

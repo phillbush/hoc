@@ -9,39 +9,39 @@
 #include "hoc.h"
 #include "code.h"
 #include "error.h"
-#include "symbol.h"
 #include "gramm.h"
 
-#define FREEAUTO()  { \
-	String *tmp, *p = autostrings; \
+#define FREESTRINGS(p) { \
+	String *_##p; \
 	while(p) { \
-		tmp = p; \
+		_##p = p; \
 		p = p->next; \
-		if (DEBUG) printf("FREE: %s\n", tmp->s); \
-		free(tmp->s); \
-		free(tmp); \
-		autostrings = NULL; \
+		if (DEBUG) printf("FREED STRING: %s\n", _##p->s); \
+		free(_##p->s); \
+		free(_##p); \
 	} \
+	p = NULL; \
 }
-#define FREEFINAL()  { \
-	String *tmp, *p = finalstrings; \
-	while(p) { \
-		tmp = p; \
-		p = p->next; \
-		if (DEBUG) printf("FREE: %s\n", tmp->s); \
-		free(tmp->s); \
-		free(tmp); \
-		finalstrings = NULL; \
-	} \
-}
-#define FREESTACK()  { \
+#define FREESTACK() { \
 	Datum *tmp, *p = stack; \
 	while(p) { \
 		tmp = p; \
 		p = p->next; \
+		if (DEBUG) printf("FREED STACK ENTRY\n"); \
 		free(tmp); \
-		stack = NULL; \
 	} \
+	stack = NULL; \
+}
+#define FREESYMTAB(p) { \
+	Symbol *_##p; \
+	while (p) { \
+		_##p = p; \
+		p = p->next; \
+		if (DEBUG) printf("FREED SYMBOL: %s\n", _##p->name); \
+		free(_##p->name); \
+		free(_##p); \
+	} \
+	p = NULL; \
 }
 
 /* function declaration, needed for bltins[] */
@@ -53,13 +53,15 @@ static struct {
 	char *s;
 	int v;
 } keywords[] = {
-	{"if",          IF},
-	{"else",        ELSE},
-	{"while",       WHILE},
+	{"func",        FUNC},
+	{"proc",        PROC},
 	{"print",       PRINT},
 	{"printf",      PRINTF},
 	{"read",        READ},
 	{"getline",     GETLINE},
+	{"if",          IF},
+	{"else",        ELSE},
+	{"while",       WHILE},
 	{"for",         FOR},
 	{"break",       BREAK},
 	{"continue",    CONTINUE},
@@ -157,18 +159,79 @@ static struct {
 	Inst *head;
 	Inst *tail;
 	Inst *progp;
+	Inst *progbase;
 	Inst *pc;
-} prog = {NULL, NULL, NULL, NULL};
+} prog = {NULL, NULL, NULL, NULL, NULL};
+
+/* the frame stack */
+static struct {
+	Frame *head;
+	Frame *tail;
+	Frame *fp;
+} frame = {NULL, NULL, NULL};
 
 /* the string list */
 static String *autostrings = NULL;      /* strings freed automatically after execution */
 static String *finalstrings = NULL;      /* strings that should be manually freed */
 
+/* the symbol table */
+static Symbol *symtab = NULL;   /* symbol table: linked list */
+
 /* flags */
-static int breaking, continuing;
+static int breaking, continuing, returning;
 
 /* previously printed value */
 static Datum prev = {.next = NULL, .isstr = 0, .u.val = 0.0};
+
+/* check return from malloc */
+static void *
+emalloc(size_t n)
+{
+	void *p;
+
+	if ((p = malloc(n)) == NULL)
+		yyerror("out of memory");
+	return p;
+}
+
+/* check return from strdup */
+static char *
+estrdup(const char *s)
+{
+	char *p;
+
+	if ((p = strdup(s)) == NULL)
+		yyerror("out of memory");
+	return p;
+}
+
+/* find s in symbol table */
+Symbol *
+lookup(const char *s)
+{
+	Symbol *sym;
+
+	for (sym = symtab; sym; sym = sym->next)
+		if (strcmp(sym->name, s) == 0)
+			return sym;
+	return NULL;
+}
+
+/* install s in symbol table */
+Symbol *
+install(const char *s, int t)
+{
+	Symbol *sym;
+
+	sym = emalloc(sizeof *sym);
+	sym->name = estrdup(s);
+	sym->type = t;
+	sym->isstr = 0;
+	sym->u.val = 0.0;
+	sym->next = symtab;
+	symtab = sym;
+	return sym;
+}
 
 /* add str to String list */
 String *
@@ -219,11 +282,20 @@ init(void)
 	Symbol *sym;
 	int i;
 
-	if ((prog.head = malloc(sizeof *prog.head)) == NULL)
-		err(1, "malloc");
+	/* initialize program memory */
+	prog.head = emalloc(sizeof *prog.head);
 	prog.head->next = NULL;
-	prog.progp = prog.head;
+	prog.progbase = prog.progp = prog.head;
+
+	/* initialize frame stack */
+	frame.head = emalloc(sizeof *frame.head);
+	frame.head->next = NULL;
+	frame.fp = frame.head;
+
+	/* initialize random function */
 	srand(time(NULL));
+
+	/* initialize symbol table with keyword and builtin names */
 	for (i = 0; keywords[i].s; i++)
 		install(keywords[i].s, keywords[i].v);
 	for (i = 0; bltins[i].s; i++) {
@@ -236,10 +308,10 @@ init(void)
 void
 prepare(void)
 {
-	continuing = breaking = 0;
+	continuing = breaking = returning = 0;
 	prog.tail = NULL;
-	prog.progp = prog.head;
-	FREEAUTO()
+	prog.progp = prog.progbase;
+	FREESTRINGS(autostrings)
 	FREESTACK()
 }
 
@@ -247,9 +319,9 @@ prepare(void)
 void
 cleanup(void)
 {
-	cleansym();
-	FREEAUTO()
-	FREEFINAL()
+	FREESYMTAB(symtab)
+	FREESTRINGS(autostrings)
+	FREESTRINGS(finalstrings)
 	FREESTACK()
 }
 
@@ -317,8 +389,7 @@ code(Inst inst)
 	*prog.tail = inst;
 	prog.tail->next = ip;
 	if (!prog.tail->next) {
-		if ((ip = malloc(sizeof *ip)) == NULL)
-			yyerror("out of memory");
+		ip = emalloc(sizeof *ip);
 		ip->next = NULL;
 		prog.tail->next = ip;
 	}
@@ -339,8 +410,7 @@ push(Datum d)
 {
 	Datum *p;
 
-	if ((p = malloc(sizeof *p)) == NULL)
-		yyerror("out of memory");
+	p = emalloc(sizeof *p);
 	*p = d;
 	p->next = stack;
 	stack = p;
