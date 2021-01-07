@@ -1070,17 +1070,23 @@ readnum(void)
 {
 	Datum d;
 	Symbol *sym;
-	char buf[BUFSIZ];
+	double v;
 
 	sym = prog.pc->u.sym;
 	prog.pc = prog.pc->next;
-	if (fgets(buf, sizeof buf, stdin)) {
+	switch (scanf("%lf", &v)) {
+	case EOF:
+		d.u.val = 0.0;
+		break;
+	case 0:
+		yyerror("non-number read into %s", sym->name);
+		break;
+	default:
 		d.u.val = 1.0;
 		sym->isstr = 0;
-		sym->u.val = atof(buf);
+		sym->u.val = v;
 		sym->type = VAR;
-	} else {
-		d.u.val = 0.0;
+		break;
 	}
 	d.isstr = 0;
 	push(d);

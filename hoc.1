@@ -24,18 +24,22 @@ For using those features, use a shell wrapper, such as
 .PP
 .B Hoc
 input consists of
-.I expressions
+.IR expressions ,
+.IR statements ,
 and
-.IR statements .
+.IR "function/procedure definitions" .
 Expressions are evaluated and their results printed
 (except assignment expressions, whose result are not printed).
-Statements, typically control flow statements and function or procedure definitions,
+Statements, typically control flow statements,
 produce no output unless they explicitly call
-.IR print .
+.I print
+or
+.IR printf .
+Function definitions produce no output.
 Blank lines and comments (contained between # and the next newline) are ignored.
 .SS Expressions
 An expression can be a number constant, a string literal, a variable name, a function call,
-or a compound expression (made of expressions and operators).
+a reading expression, or a compound expression (made of expressions and operators).
 An expression can be surrounded by parentheses
 (in order to change the precedence of its operators, for example).
 A sequence of expressions can be written delimited with a , (comma).
@@ -140,6 +144,11 @@ Returns the logarithm base 10 of x.
 .B sin(x)
 Returns the sin of x.
 .TP
+.B sprintf(fmt, ...)
+Returns a string resulting from formatting expressions given as argument,
+according to the printf(1) format
+.IR fmt .
+.TP
 .B sqrt(x)
 Returns the square root of x.
 .TP
@@ -188,6 +197,19 @@ They all return the result of the assignment.
 .TP
 .B ,
 Comma (used to group expressions).
+.PP
+Reading expressions are used to read a value from the standard input into a variable.
+There are two reading expressions, introduced by the keywords
+.B read
+and
+.BR getline ,
+and followed by the name of a variable.
+.TP
+.B read VAR
+Read a number from the stadard input into the variable VAR.
+.TP
+.B getline VAR
+Read a string from the stadard input into the variable VAR.
 .SS Statements
 A statement can be an expression, a compound statement, a print statement,
 a printf statement, a control flow statement, or a procedure or function definition statement.
@@ -244,8 +266,7 @@ or to STMT2 if EXPR1 is zero and EXPR2 is nonzero.
 .B while (EXPR) STMT
 A while statement is a loop statement
 that passes control to STMT repeatedly so long as EXPR evaluates to nonzero (true).
-.PP
-Procedure and function definition statements.
+.SS Procedure and function definitions
 .br
 TODO.
 .SH EXIT STATUS
