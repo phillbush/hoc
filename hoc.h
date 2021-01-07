@@ -10,6 +10,7 @@ typedef struct String {
 typedef union Value {
 	struct Symbol *sym;
 	struct String *str;
+	struct Function *fun;
 	double val;
 	int bltin;
 } Value;
@@ -17,17 +18,17 @@ typedef union Value {
 /* symbol table entry */
 typedef struct Symbol {
 	struct Symbol *next;
+	union Value u;
 	char *name;
 	int type;
 	int isstr;
-	union Value u;
 } Symbol;
 
 /* interpreter stack type */
 typedef struct Datum {
 	struct Datum *next;
-	int isstr;
 	union Value u;
+	int isstr;
 } Datum;
 
 /* machine instruction type */
@@ -35,11 +36,11 @@ typedef struct Inst {
 	struct Inst *next;
 	enum {VAL, STR, SYM, OPR, IP, NARG} type;
 	union {
-		double val;
-		String *str;
+		struct String *str;
 		struct Symbol *sym;
-		void (*opr)(void);
 		struct Inst *ip;
+		void (*opr)(void);
+		double val;
 		int narg;
 	} u;
 } Inst;
@@ -47,7 +48,7 @@ typedef struct Inst {
 /* procedure/function definition type */
 typedef struct Function {
 	struct Inst *code;
-	struct Symbol **args;
+	struct Symbol *args;
 	size_t nargs;
 } Function;
 

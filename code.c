@@ -1265,7 +1265,8 @@ ifcode(void)
 		execute(savepc->u.ip);
 	else if (N1(savepc)->u.ip)              /* else part? */
 		execute(N1(savepc)->u.ip);
-	prog.pc = N2(savepc)->u.ip;             /* next statement */
+	if (!returning)
+		prog.pc = N2(savepc)->u.ip;     /* next statement */
 }
 
 void
@@ -1276,6 +1277,9 @@ whilecode(void)
 	savepc = prog.pc;
 	while (cond(N2(savepc))) {
 		execute(savepc->u.ip);
+		if (returning) {
+			break;
+		}
 		if (continuing) {
 			continuing = 0;
 			continue;
@@ -1285,7 +1289,8 @@ whilecode(void)
 			break;
 		}
 	}
-	prog.pc = N1(savepc)->u.ip;
+	if (!returning)
+		prog.pc = N1(savepc)->u.ip;
 }
 
 void
@@ -1296,6 +1301,9 @@ forcode(void)
 	savepc = prog.pc;
 	for ((void)execpop(N4(savepc)); cond(savepc->u.ip); (void)execpop(N1(savepc)->u.ip)) {
 		execute(N2(savepc)->u.ip);
+		if (returning) {
+			break;
+		}
 		if (continuing) {
 			continuing = 0;
 			continue;
@@ -1305,7 +1313,8 @@ forcode(void)
 			break;
 		}
 	}
-	prog.pc = N3(savepc)->u.ip;
+	if (!returning)
+		prog.pc = N3(savepc)->u.ip;
 }
 
 void
