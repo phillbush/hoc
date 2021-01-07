@@ -64,8 +64,8 @@ makesym(char *yytext)
 	Symbol *sym;
 
 	/* if name isn't found, it is installed with the type UNDEF */
-	if ((sym = lookup(yytext)) == NULL)
-		sym = install(yytext, UNDEF);
+	if ((sym = lookup(NULL, yytext)) == NULL)
+		sym = install(NULL, yytext, UNDEF);
 
 	yylval.sym = sym;
 

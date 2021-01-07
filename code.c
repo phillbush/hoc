@@ -172,10 +172,10 @@ static struct {
 
 /* the string list */
 static String *autostrings = NULL;      /* strings freed automatically after execution */
-static String *finalstrings = NULL;      /* strings that should be manually freed */
+static String *finalstrings = NULL;     /* strings that should be manually freed */
 
 /* the symbol table */
-static Symbol *symtab = NULL;   /* symbol table: linked list */
+static Symbol *global = NULL;           /* global symbol table */
 
 /* flags */
 static int breaking, continuing, returning;
@@ -205,31 +205,41 @@ estrdup(const char *s)
 	return p;
 }
 
-/* find s in symbol table */
+/* find s in symtab; if using global symbol table, call with symtab = NULL */
 Symbol *
-lookup(const char *s)
+lookup(Symbol *symtab, const char *s)
 {
 	Symbol *sym;
 
+	if (symtab == NULL)
+		symtab = global;
 	for (sym = symtab; sym; sym = sym->next)
 		if (strcmp(sym->name, s) == 0)
 			return sym;
 	return NULL;
 }
 
-/* install s in symbol table */
+/* install s into *symtab; if using global symbol table, call with symtab = NULL */
 Symbol *
-install(const char *s, int t)
+install(Symbol **symtab, const char *s, int t)
 {
-	Symbol *sym;
+	Symbol *sym, *next;
 
+	if (symtab == NULL) {           /* we are using the global symbol table */
+		symtab = &global;
+		next = global;
+	} else if (*symtab == NULL) {   /* we are using an empty local symbol table */
+		next = global;
+	} else {                        /* we are using a non-empty local symbol table */
+		next = *symtab;
+	}
 	sym = emalloc(sizeof *sym);
 	sym->name = estrdup(s);
 	sym->type = t;
 	sym->isstr = 0;
 	sym->u.val = 0.0;
-	sym->next = symtab;
-	symtab = sym;
+	sym->next = next;
+	*symtab = sym;
 	return sym;
 }
 
@@ -297,9 +307,9 @@ init(void)
 
 	/* initialize symbol table with keyword and builtin names */
 	for (i = 0; keywords[i].s; i++)
-		install(keywords[i].s, keywords[i].v);
+		install(NULL, keywords[i].s, keywords[i].v);
 	for (i = 0; bltins[i].s; i++) {
-		sym = install(bltins[i].s, BLTIN);
+		sym = install(NULL, bltins[i].s, BLTIN);
 		sym->u.bltin = i;
 	}
 }
@@ -319,7 +329,7 @@ prepare(void)
 void
 cleanup(void)
 {
-	FREESYMTAB(symtab)
+	FREESYMTAB(global)
 	FREESTRINGS(autostrings)
 	FREESTRINGS(finalstrings)
 	FREESTACK()
@@ -1401,3 +1411,5 @@ bltin(void)
 	d1.isstr = 0;
 	push(d1);
 }
+
+/* put function or procedure in symbol table */

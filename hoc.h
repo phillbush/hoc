@@ -55,6 +55,6 @@ typedef struct Function {
 /* procedure/function call stack frame */
 typedef struct Frame {
 	struct Frame *prev, *next;
-	struct Symbol *symtab;          /* local symbol table */
+	struct Symbol *local;           /* local symbol table */
 	struct Int *retpc;              /* where to resume after return */
 } Frame;
