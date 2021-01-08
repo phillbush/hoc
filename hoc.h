@@ -12,8 +12,8 @@ typedef struct Name {
 /* string entry type */
 typedef struct String {
 	struct String *prev, *next;
+	enum {FINAL, AUTO, ARGV} orig;
 	char *s;
-	int isfinal;
 	size_t count;
 } String;
 

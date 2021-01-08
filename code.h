@@ -9,7 +9,7 @@
 #define N4(p) ((p)->next->next->next->next)
 
 /* routines called by main.o */
-void init(void);
+void init(int argc, char *argv[]);
 void prepare(void);
 void cleanup(void);
 void debug(void);
@@ -31,6 +31,7 @@ void movstr(String *str);
 /* instruction operation routines */
 void oprpop(void);
 void eval(void);
+void cmdarg(void);
 void add(void);
 void sub(void);
 void mul(void);

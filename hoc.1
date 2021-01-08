@@ -163,7 +163,16 @@ Operators can be used to create a new expression from existing ones.
 An operator can be unary (use a single expression) or binary (use two expressions).
 The operators, in decreasing order of precedence, are listed below;
 operators listed together have the same precedence.
+All operators expect a numeric value and will convert strings to numbers as needed.
 All operators are binary and associate from left to right, unless explicitly stated otherwise.
+.TP
+.B $
+(unary, right associative)
+Access command-line arguments.
+$1 is the first command-line argument, $2 is the second, and so on.
+$0 is the name of the input file.
+If a value greater than the number of command-line argument is used,
+returns 0.0 instead.
 .TP
 .B ^
 (right associative)
@@ -434,6 +443,8 @@ does).
 The print and printf statements; and the sprintf built-in function.
 .IP \(bu 2
 Do-while statements.
+.IP \(bu 2
+Access to command-line arguments.
 .IP \(bu 2
 Support for comments.
 .IP \(bu 2

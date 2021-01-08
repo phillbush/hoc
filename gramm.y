@@ -64,6 +64,7 @@ int yylex(void);
 %left  '*' '/' '%'
 %right UNARYSIGN NOT INC DEC
 %right '^'
+$right '$'
 
 %%
 
@@ -126,6 +127,7 @@ expr:
 	| READ VAR                              { oprcode(readnum); namecode($2); }
 	| GETLINE VAR                           { oprcode(readline); namecode($2); }
 	| FUNCTION begin '(' arglist ')'        { $$ = $2; oprcode(call); namecode($1); argcode($4); }
+	| '$' expr                              { $$ = $2; oprcode(cmdarg); }
 	| expr '+' expr                         { oprcode(add); }
 	| expr '-' expr                         { oprcode(sub); }
 	| expr '*' expr                         { oprcode(mul); }

@@ -35,9 +35,17 @@ main(int argc, char *argv[])
 {
 	struct sigaction sa;
 	FILE *fp = NULL;
+	char ch;
 
-	if (argc > 2 || (argc == 2 && argv[1][0] == '-' && argv[1][1]))
-		usage();
+	while ((ch = getopt(argc, argv, "")) != -1) {
+		switch (ch) {
+		default:
+			usage();
+			break;
+		}
+	}
+	argc -= optind;
+	argv += optind;
 
 	/* assign action for SIGFPE */
 	sa.sa_handler = sigfpehand;
@@ -47,14 +55,16 @@ main(int argc, char *argv[])
 		err(1, "sigaction");
 
 	/* open input file */
-	if (argc == 2 && strcmp(argv[1], "-") != 0)
-		if ((fp = fopen(argv[1], "r")) == NULL)
-			err(1, "%s", argv[1]);
-	if (fp)
-		yyin = fp;
+	if (argc) {
+		if (strcmp(*argv, "-") != 0)
+			if ((fp = fopen(*argv, "r")) == NULL)
+				err(1, "%s", *argv);
+		if (fp)
+			yyin = fp;
+	}
 
 	/* initialize machine */
-	init();
+	init(argc, argv);
 
 	/* parse and execute input until EOF */
 	setjmp(begin);

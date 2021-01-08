@@ -49,7 +49,6 @@ shell with history support.
 • Add string concatenation.
 • Add option -e to read code from command-line.
 • Read environment variables by a getenv() built-in function.
-• Access command-line arguments with special $1, $2, $3, etc variables.
 
 
 § FEATURES
@@ -138,6 +137,11 @@ The `getline VAR` expression reads a line into the variable VAR.
 do-while.
 This version of hoc(1) supports do-while statements.
 
+Access command-line arguments.
+This version of hoc(1) can access command-line arguments with the '$'
+operator.  $1 is the first command-line argument, $2 is the second,
+and so on.  $0 is the name of the input file.
+
 
 § NON-FEATURES
 
@@ -151,6 +155,7 @@ If you want editing features use a shell wrapper such as rlwrap(1).
 
 Reading from multiple files will not be implemented.
 Use cat(1).
+
 
 § HOW IT WORKS
 

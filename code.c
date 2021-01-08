@@ -146,6 +146,8 @@ static struct {
 /* the string list */
 static String *autostrings = NULL;      /* strings freed automatically after execution */
 static String *finalstrings = NULL;     /* strings that should be manually freed */
+static String *argvstrings = NULL;      /* strings from command-line arguments */
+static int argc = 0;                    /* number of command-line arguments */
 
 /* the symbol table */
 static Symbol *global = NULL;           /* global symbol table */
@@ -397,10 +399,10 @@ addstr(char *s, int final)
 	}
 	if (final) {
 		list = &finalstrings;
-		p->isfinal = 1;
+		p->orig = FINAL;
 	} else {
 		list = &autostrings;
-		p->isfinal = 0;
+		p->orig = AUTO;
 	}
 	p->s = s;
 	if (*list)
@@ -428,10 +430,17 @@ oprname(void (*opr)(void))
 
 /* initialize machine */
 void
-init(void)
+init(int c, char *v[])
 {
 	Name *name;
 	int i;
+
+	argc = c;
+	argvstrings = emalloc(argc * sizeof *argvstrings);
+	for (i = 0; i < argc; i++) {
+		argvstrings[i].s = v[i];
+		argvstrings[i].orig = ARGV;
+	}
 
 	/* initialize program memory */
 	prog.head = emalloc(sizeof *prog.head);
@@ -632,11 +641,13 @@ strpush(void)
 static void
 dfree(String *str)
 {
+	if (str->orig != FINAL)
+		return;
 	if (str->count > 1) {
 		str->count--;
 	} else {
 		if (DEBUG)
-			printf("FREE: %s\n", str->s);
+			printf("FREED STRING: %s\n", str->s);
 		free(str->s);
 		if (str->next)
 			str->next->prev = str->prev;
@@ -652,9 +663,9 @@ dfree(String *str)
 void
 movstr(String *str)
 {
-	if (str->isfinal) {
+	if (str->orig == FINAL) {
 		str->count++;
-	} else {
+	} else if (str->orig == AUTO) {
 		if (str->next)
 			str->next->prev = str->prev;
 		if (str->prev)
@@ -665,7 +676,7 @@ movstr(String *str)
 			finalstrings->prev = str;
 		str->next = finalstrings;
 		str->prev = NULL;
-		str->isfinal = 1;
+		str->orig = FINAL;
 		str->count = 1;
 		finalstrings = str;
 	}
@@ -772,6 +783,25 @@ power(void)
 	d1 = popnum();
 	d1.u.val = pow(d1.u.val, d2.u.val);
 	push(d1);
+}
+
+/* get command-line argument */
+void
+cmdarg(void)
+{
+	Datum d;
+	int i;
+
+	d = popnum();
+	i = (int)d.u.val;
+	if (i >= 0 && i < argc) {
+		d.u.str = &argvstrings[i];
+		d.isstr = 1;
+	} else {
+		d.u.val = 0.0;
+		d.isstr = 0;
+	}
+	push(d);
 }
 
 /* evaluate variable on stack */
