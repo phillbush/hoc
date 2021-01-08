@@ -14,7 +14,7 @@ ES      (\\(['"\?\\abfnrtv]|[0-7]{1,3}|x[a-fA-F0-9]+))
 #include "gramm.h"
 
 static int makenum(char *yytext);
-static int makesym(char *yytext);
+static int makenam(char *yytext);
 static int makestr(char *yytext);
 %}
 
@@ -26,7 +26,7 @@ static int makestr(char *yytext);
 
 [ \t]                           { ; }
 ({D}+\.?|{D}*\.{D}+){E}?        { return makenum(yytext); }
-{L}{A}*                         { return makesym(yytext); }
+{L}{A}*                         { return makenam(yytext); }
 \"([^"\\\n]|{ES})*\"            { return makestr(yytext); }
 \.                              { return PREVIOUS; }
 \+\+                            { return INC; }
@@ -59,15 +59,15 @@ makenum(char *yytext)
 }
 
 static int
-makesym(char *yytext)
+makenam(char *yytext)
 {
-	Symbol *sym;
+	Name *name;
 
-	/* if name isn't found, it is installed with the type UNDEF */
-	if ((sym = lookup(NULL, yytext)) == NULL)
-		sym = install(NULL, yytext, UNDEF);
+	/* if name isn't found, it is installed with the type VAR */
+	if ((name = lookupname(yytext)) == NULL)
+		name = installglobalname(yytext, UNDEF);
 
-	yylval.sym = sym;
+	yylval.name = name;
 
 	/*
 	 * Even if the name is installed as UNDEF,  the returned type is
@@ -78,7 +78,7 @@ makesym(char *yytext)
 	 * is a legal one  (such as the left side of an assignment, like
 	 * `x=1`).
 	 */
-	return sym->type == UNDEF ? VAR : sym->type;
+	return name->type == UNDEF ? VAR : name->type;
 }
 
 static int

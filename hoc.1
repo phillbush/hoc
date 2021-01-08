@@ -53,6 +53,10 @@ As in C, any nonzero value is taken to be true.
 .PP
 Number constants can be expressed in the decimal notation (12.345),
 or in the decimal scientific notation (12.345e-67).
+The number format is that recognized by
+.IR atof (3)
+and
+.IR scanf (3).
 .PP
 String literals are strings of characters surrounded by double quotes.
 Backslash escapes are used to include a special character in a string.
@@ -159,7 +163,7 @@ Operators can be used to create a new expression from existing ones.
 An operator can be unary (use a single expression) or binary (use two expressions).
 The operators, in decreasing order of precedence, are listed below;
 operators listed together have the same precedence.
-All operators are binary and associate from left to right, unless explicitly stated otherwise;
+All operators are binary and associate from left to right, unless explicitly stated otherwise.
 .TP
 .B ^
 (right associative)
@@ -204,6 +208,8 @@ There are two reading expressions, introduced by the keywords
 and
 .BR getline ,
 and followed by the name of a variable.
+The return value of a read expression is 1.0 (true) if a value was read,
+and 0.0 (false) if it encountered end-of-file or an error.
 .TP
 .B read VAR
 Read a number from the stadard input into the variable VAR.
@@ -263,12 +269,68 @@ An if-else statement is a selection statement that causes the control to pass
 to the statement STMT1 if the expression EXPR1 is nonzero,
 or to STMT2 if EXPR1 is zero and EXPR2 is nonzero.
 .TP
+.B return
+A return statement that does not return a value may appear only within a procedure statement
+and causes the procedure to return.
+.TP
+.B return EXPR
+A return statement that returns a value may appear only within a function statement
+and causes the function to return with the value of the expression
+.BR EXPR .
+.TP
 .B while (EXPR) STMT
 A while statement is a loop statement
 that passes control to STMT repeatedly so long as EXPR evaluates to nonzero (true).
-.SS Procedure and function definitions
+.SS Function and procedure definition
 .br
-TODO.
+A function or procedure definition is a special statement used to define a function or a procedure.
+Functions and procedures are distinct in
+.BR hoc ,
+although they are defined by the same mechanism.
+This distinction is simply for run-time error checking:
+it is an error for a procedure to return a value, and for a function not to return one.
+A function or procedure definition must not occur inside another statement.
+.PP
+The syntax of function and procedure definitions is explained below.
+.TP
+.B func NAME(PARAMS) STMT
+Defines the function
+.BR NAME ,
+with the parameters
+.BR PARAM,
+as the statement
+.BR STMT .
+.B NAME
+must be a valid name for a variable that is not used by an variable or another function.
+.B PARAM
+must be a comma-delimited list of variable names that are local to the function.
+.B STMT
+must be a statement in which a
+.B return
+statement
+occurs.
+.TP
+.B proc NAME(PARAMS) STMT
+Defines the procedure
+.BR NAME ,
+with the parameters
+.BR PARAM,
+as the statement
+.BR STMT .
+.B NAME
+must be a valid name for a variable that is not used by an variable or another function.
+.B PARAM
+must be a comma-delimited list of variable names that are local to the function.
+.B STMT
+must be a statement.
+.PP
+Both functions and procedures define a list of local variables (their parameters).
+Those variables cannot be accessed outside the function or parameter;
+and are different from the ones with the same name in the global scope.
+As in
+.IR awk (1),
+a function or procedure can be called with less arguments than the number of parameters it has.
+In this case, the remaining parameters are local variables initialized to 0.0.
 .SH EXIT STATUS
 .TP
 .B 0
@@ -277,23 +339,34 @@ Success.
 .B >0
 Error occurred.
 .SH EXAMPLES
-The example below shows an interactive session of
+The code below is an example of input for
 .BR hoc .
-The output is listed indented.
 .IP
 .EX
-1+2*3
-	7
-angle=pi()/3
-r=sin(angle)
-r
-	0.866025
-r*2
-	1.73205
-n = 10
-s = "banana"
-printf "%-07d:%s\n", n, s
-	10     :banana
+func gcd(a, b, tmp) {
+	tmp = abs(a) % abs(b)
+	if (tmp == 0)
+		return abs(b)
+	return gcd(b, tmp)
+}
+for (i = 1; i < 12; i++)
+	printf "gcd(%d, 12) = %d\n", i, gcd(i, 12)
+.EE
+.PP
+The following is the output the program above.
+.IP
+.EX
+gcd(1, 12) = 1
+gcd(2, 12) = 2
+gcd(3, 12) = 3
+gcd(4, 12) = 4
+gcd(5, 12) = 1
+gcd(6, 12) = 6
+gcd(7, 12) = 1
+gcd(8, 12) = 4
+gcd(9, 12) = 3
+gcd(10, 12) = 2
+gcd(11, 12) = 1
 .EE
 .SH SEE ALSO
 .IR bc (1),
@@ -355,6 +428,14 @@ Support for converting strings to numbers.
 Different from the book, this implementation does not have constant values, such as PI.
 There are, instead, correspondent nullary functions, such as pi().
 .PP
-This implementation does not support input (yet).
-.PP
-This implementation does not support function or procedure definition (yet).
+Different from the book, in which the
+.B print
+statement produces no newline at the end,
+the
+.B print
+statement of this implementation works like the one in
+.IR awk (1),
+that is, it produces a newline at the end.
+For producing no newline, use the
+.B printf
+statement instead.

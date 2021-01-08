@@ -7,11 +7,15 @@
 #include "code.h"
 #include "error.h"
 
+#define ipcode(i)  code((Inst){.type = IP, .u.ip = (i)})
 #define valcode(v) code((Inst){.type = VAL, .u.val = (v)})
 #define argcode(a) code((Inst){.type = NARG, .u.narg = (a)})
 #define strcode(s) code((Inst){.type = STR, .u.str = (s)})
 #define oprcode(o) code((Inst){.type = OPR, .u.opr = (o)})
-#define symcode(s) code((Inst){.type = SYM, .u.sym = (s)})
+#define namecode(n) code((Inst){.type = NAME, .u.name = (n)})
+#define fill1(x, a) \
+	N1((x))->type = IP, \
+	N1((x))->u.ip = (a)
 #define fill2(x, a, b) \
 	N1((x))->type = N2((x))->type = IP, \
 	N1((x))->u.ip = (a), \
@@ -32,8 +36,8 @@ int yylex(void);
 %}
 
 %union {
-	Symbol *sym;
 	String *str;
+	Name *name;
 	Inst *inst;
 	double val;
 	int narg;
@@ -41,13 +45,15 @@ int yylex(void);
 
 %token <str>  STRING
 %token <val>  NUMBER PREVIOUS
-%token <sym>  VAR BLTIN UNDEF
-%token <sym>  PRINT PRINTF READ GETLINE
-%token <sym>  WHILE IF ELSE FOR BREAK CONTINUE
-%token <sym>  FUNC PROC FUNCTION PROCEDURE
+%token <name> VAR BLTIN UNDEF
+%token <name> PRINT PRINTF READ GETLINE
+%token <name> WHILE IF ELSE FOR BREAK CONTINUE
+%token <name> FUNC PROC FUNCTION PROCEDURE RETURN
+%type  <name> params paramlist
 %type  <narg> args arglist
-%type  <inst> expr exprlist stmt stmtlist asgn
+%type  <inst> expr exprlist stmt stmtlist stmtnl asgn
 %type  <inst> and or while if cond forcond forloop begin end
+%type  <name> procname
 %left  ','
 %right '=' ADDEQ SUBEQ MULEQ DIVEQ MODEQ
 %left  OR
@@ -62,8 +68,9 @@ int yylex(void);
 %%
 
 list:
-	  /* nothing */         { inloop = 0; }
+	  /* nothing */         { indef = inloop = 0; }
 	| list term
+	| list defn term        { oprcode(NULL); return 1; }
 	| list stmt term        { oprcode(NULL); return 1; }
 	| list asgn term        { oprcode(oprpop); oprcode(NULL); return 1; }
 	| list exprlist term    { oprcode(println); oprcode(NULL); return 1; }
@@ -71,29 +78,38 @@ list:
 	;
 
 asgn:
-	  VAR '=' expr          { $$ = $3; oprcode(sympush); symcode($1); oprcode(assign); }
-	| VAR ADDEQ expr        { $$ = $3; oprcode(sympush); symcode($1); oprcode(addeq); }
-	| VAR SUBEQ expr        { $$ = $3; oprcode(sympush); symcode($1); oprcode(subeq); }
-	| VAR MULEQ expr        { $$ = $3; oprcode(sympush); symcode($1); oprcode(muleq); }
-	| VAR DIVEQ expr        { $$ = $3; oprcode(sympush); symcode($1); oprcode(diveq); }
-	| VAR MODEQ expr        { $$ = $3; oprcode(sympush); symcode($1); oprcode(modeq); }
-	| INC VAR               { $$ = oprcode(preinc); symcode($2); }
-	| DEC VAR               { $$ = oprcode(predec); symcode($2); }
-	| VAR INC               { $$ = oprcode(postinc); symcode($1); }
-	| VAR DEC               { $$ = oprcode(postdec); symcode($1); }
+	  VAR '=' expr          { $$ = $3; oprcode(assign); namecode($1); }
+	| VAR ADDEQ expr        { $$ = $3; oprcode(addeq); namecode($1); }
+	| VAR SUBEQ expr        { $$ = $3; oprcode(subeq); namecode($1); }
+	| VAR MULEQ expr        { $$ = $3; oprcode(muleq); namecode($1); }
+	| VAR DIVEQ expr        { $$ = $3; oprcode(diveq); namecode($1); }
+	| VAR MODEQ expr        { $$ = $3; oprcode(modeq); namecode($1); }
+	| INC VAR               { $$ = oprcode(preinc); namecode($2); }
+	| DEC VAR               { $$ = oprcode(predec); namecode($2); }
+	| VAR INC               { $$ = oprcode(postinc); namecode($1); }
+	| VAR DEC               { $$ = oprcode(postdec); namecode($1); }
+	;
+
+/* used to break line after if, else, etc */
+stmtnl:
+	  stmt
+	| '\n' stmtnl           { $$ = $2; }
 	;
 
 stmt:
 	  '{' stmtlist '}'                      { $$ = $2; }
-	| BREAK                                 { looponly($1->name); oprcode(breakcode); }
-	| CONTINUE                              { looponly($1->name); oprcode(continuecode); }
-	| exprlist                              { oprcode(oprpop); }
+	| BREAK                                 { looponly($1->s); oprcode(breakcode); }
+	| CONTINUE                              { looponly($1->s); oprcode(continuecode); }
+	| RETURN                                { defnonly(); oprcode(procret); }
+	| RETURN expr                           { $$ = $2; defnonly(); oprcode(funcret); }
+	| PROCEDURE begin '(' arglist ')'       { $$ = $2; oprcode(call); namecode($1); argcode($4); }
 	| PRINT begin arglist                   { $$ = $2; oprcode(_print); argcode($3); }
 	| PRINTF begin arglist                  { $$ = $2; oprcode(_printf); argcode($3); }
-	| if cond stmt end                      { fill3($1, $3, NULL, $4); }
-	| if cond stmt end ELSE stmt end        { fill3($1, $3, $6, $7); }
-	| while cond stmt end                   { fill2($1, $3, $4); inloop--; }
-	| forloop '(' forcond ';' forcond ';' forcond ')' stmt end { fill4($1, $5, $7, $9, $10); inloop--; }
+	| exprlist                              { oprcode(oprpop); }
+	| if cond stmtnl end                      { fill3($1, $3, NULL, $4); }
+	| if cond stmtnl end ELSE stmtnl end        { fill3($1, $3, $6, $7); }
+	| while cond stmtnl end                   { fill2($1, $3, $4); inloop--; }
+	| forloop '(' forcond ';' forcond ';' forcond ')' stmtnl end { fill4($1, $5, $7, $9, $10); inloop--; }
 	// | ';'           { $$ = oprcode(NULL); }         /* null statement */
 	;
 
@@ -102,42 +118,68 @@ exprlist:
 	| exprlist ',' expr
 
 expr:
-	  NUMBER                        { $$ = oprcode(constpush); valcode($1); }
-	| STRING                        { $$ = oprcode(strpush); strcode($1); }
-	| PREVIOUS                      { $$ = oprcode(prevpush); }
-	| VAR                           { $$ = oprcode(sympush); symcode($1); oprcode(eval); }
-	| READ VAR                      { oprcode(readnum); symcode($2); }
-	| GETLINE VAR                   { oprcode(readline); symcode($2); }
-	| expr '+' expr                 { oprcode(add); }
-	| expr '-' expr                 { oprcode(sub); }
-	| expr '*' expr                 { oprcode(mul); }
-	| expr '/' expr                 { oprcode(divd); }
-	| expr '%' expr                 { oprcode(mod); }
-	| expr '^' expr                 { oprcode(power); }
-	| expr GT expr                  { oprcode(gt); }
-	| expr GE expr                  { oprcode(ge); }
-	| expr LT expr                  { oprcode(lt); }
-	| expr LE expr                  { oprcode(le); }
-	| expr EQ expr                  { oprcode(eq); }
-	| expr NE expr                  { oprcode(ne); }
-	| NOT expr                      { $$ = $2; oprcode(not); }
-	| expr and expr end             { fill2($2, $3, $4); }
-	| expr or expr end              { fill2($2, $3, $4); }
-	| '-' expr %prec UNARYSIGN      { $$ = $2; oprcode(negate); }
-	| '+' expr %prec UNARYSIGN      { $$ = $2; }
-	| '(' exprlist ')'              { $$ = $2; }
-	| BLTIN begin '(' arglist ')'   { $$ = $2; oprcode(bltin); symcode($1); argcode($4); }
+	  NUMBER                                { $$ = oprcode(constpush); valcode($1); }
+	| STRING                                { $$ = oprcode(strpush); if (indef) movstr($1); strcode($1); }
+	| PREVIOUS                              { $$ = oprcode(prevpush); }
+	| VAR                                   { $$ = oprcode(eval); namecode($1); }
+	| READ VAR                              { oprcode(readnum); namecode($2); }
+	| GETLINE VAR                           { oprcode(readline); namecode($2); }
+	| FUNCTION begin '(' arglist ')'        { $$ = $2; oprcode(call); namecode($1); argcode($4); }
+	| expr '+' expr                         { oprcode(add); }
+	| expr '-' expr                         { oprcode(sub); }
+	| expr '*' expr                         { oprcode(mul); }
+	| expr '/' expr                         { oprcode(divd); }
+	| expr '%' expr                         { oprcode(mod); }
+	| expr '^' expr                         { oprcode(power); }
+	| expr GT expr                          { oprcode(gt); }
+	| expr GE expr                          { oprcode(ge); }
+	| expr LT expr                          { oprcode(lt); }
+	| expr LE expr                          { oprcode(le); }
+	| expr EQ expr                          { oprcode(eq); }
+	| expr NE expr                          { oprcode(ne); }
+	| NOT expr                              { $$ = $2; oprcode(not); }
+	| expr and expr end                     { fill2($2, $3, $4); }
+	| expr or expr end                      { fill2($2, $3, $4); }
+	| '-' expr %prec UNARYSIGN              { $$ = $2; oprcode(negate); }
+	| '+' expr %prec UNARYSIGN              { $$ = $2; }
+	| '(' exprlist ')'                      { $$ = $2; }
+	| BLTIN begin '(' arglist ')'           { $$ = $2; oprcode(bltin); namecode($1); argcode($4); }
 	| asgn
 	;
 
+defn:
+	  FUNC procname                 { indef = 1; verifydef($2, FUNCTION); }
+	  '(' paramlist ')' stmtnl        { oprcode(procret); define($2, $5); indef = 0; }
+	| PROC procname                 { indef = 1; verifydef($2, PROCEDURE); }
+	  '(' paramlist ')' stmtnl        { oprcode(procret); define($2, $5); indef = 0; }
+	;
+
+procname:
+	  VAR
+	;
+
 args:
-	  expr                  { $$ = 1;  }
+	  expr                  { $$ = 1; }
 	| args ',' expr         { $$ = $1 + 1; }
 	;
 
 arglist:
 	  /* nothing */         { $$ = 0; }
 	| args
+	;
+
+/*
+ * we need get params in the reverse order, for that's the order in which
+ * we pop() arguments in call()
+ */
+params:
+	  VAR                   { $$ = installlocalname($1->s, NULL); }
+	| params ',' VAR        { $$ = installlocalname($3->s, $1); }
+	;
+
+paramlist:
+	  /* nothing */         { $$ = NULL; }
+	| params
 	;
 
 forcond:
@@ -190,6 +232,7 @@ end:
 
 %%
 
+static int indef;
 static size_t inloop;
 
 /* error if using break/continue out of loop */
@@ -198,4 +241,12 @@ looponly(const char *s)
 {
 	if (!inloop)
 		yyerror("%s used outside loop", s);
+}
+
+/* error if using return out of function definition */
+static void
+defnonly(void)
+{
+	if (!indef)
+		yyerror("return used outside definition");
 }

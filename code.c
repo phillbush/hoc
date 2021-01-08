@@ -11,39 +11,6 @@
 #include "error.h"
 #include "gramm.h"
 
-#define FREESTRINGS(p) { \
-	String *_##p; \
-	while(p) { \
-		_##p = p; \
-		p = p->next; \
-		if (DEBUG) printf("FREED STRING: %s\n", _##p->s); \
-		free(_##p->s); \
-		free(_##p); \
-	} \
-	p = NULL; \
-}
-#define FREESTACK() { \
-	Datum *tmp, *p = stack; \
-	while(p) { \
-		tmp = p; \
-		p = p->next; \
-		if (DEBUG) printf("FREED STACK ENTRY\n"); \
-		free(tmp); \
-	} \
-	stack = NULL; \
-}
-#define FREESYMTAB(p) { \
-	Symbol *_##p; \
-	while (p) { \
-		_##p = p; \
-		p = p->next; \
-		if (DEBUG) printf("FREED SYMBOL: %s\n", _##p->name); \
-		free(_##p->name); \
-		free(_##p); \
-	} \
-	p = NULL; \
-}
-
 /* function declaration, needed for bltins[] */
 static double Random(void);
 static double Integer(double);
@@ -65,6 +32,7 @@ static struct {
 	{"for",         FOR},
 	{"break",       BREAK},
 	{"continue",    CONTINUE},
+	{"return",      RETURN},
 	{NULL,          0}
 };
 
@@ -92,7 +60,6 @@ static struct {
 	{"predec",       predec},
 	{"postinc",      postinc},
 	{"postdec",      postdec},
-	{"sympush",      sympush},
 	{"constpush",    constpush},
 	{"prevpush",     prevpush},
 	{"strpush",      strpush},
@@ -117,6 +84,9 @@ static struct {
 	{"breakcode",    breakcode},
 	{"continuecode", continuecode},
 	{"bltin",        bltin},
+	{"call",         call},
+	{"procret",      procret},
+	{"funcret",      funcret},
 	{NULL,           NULL}
 };
 
@@ -159,16 +129,17 @@ static struct {
 	Inst *head;
 	Inst *tail;
 	Inst *progp;
-	Inst *progbase;
+	Inst *base;
 	Inst *pc;
 } prog = {NULL, NULL, NULL, NULL, NULL};
 
 /* the frame stack */
 static struct {
-	Frame *head;
-	Frame *tail;
-	Frame *fp;
-} frame = {NULL, NULL, NULL};
+	Frame *head;    /* beginning of frame stack */
+	Frame *tail;    /* current frame */
+	Frame *curr;    /* current frame */
+	Frame *next;    /* next available frame */
+} frame = {NULL, NULL, NULL, NULL};
 
 /* the string list */
 static String *autostrings = NULL;      /* strings freed automatically after execution */
@@ -176,6 +147,10 @@ static String *finalstrings = NULL;     /* strings that should be manually freed
 
 /* the symbol table */
 static Symbol *global = NULL;           /* global symbol table */
+static Symbol *currsymtab;              /* current symbol table */
+
+/* the name table (for keywords and variable names) */
+static Name *nametab = NULL;
 
 /* flags */
 static int breaking, continuing, returning;
@@ -194,6 +169,77 @@ emalloc(size_t n)
 	return p;
 }
 
+/* free string list */
+static void
+freestrings(String **strings)
+{
+	String *tmp, *p;
+
+	p = *strings;
+	while (p) {
+		tmp = p;
+		p = p->next;
+		if (DEBUG)
+			fprintf(stderr, "FREED STRING: %s\n", tmp->s);
+		free(tmp->s);
+		free(tmp);
+	}
+	*strings = NULL;
+}
+
+/* free contents of stack */
+static void
+freestack(void)
+{
+	Datum *tmp, *p = stack;
+
+	while(p) {
+		tmp = p;
+		p = p->next;
+		if (DEBUG)
+			fprintf(stderr, "FREED STACK ENTRY (THIS SHOULD NOT OCCUR)\n");
+		free(tmp);
+	}
+	stack = NULL;
+}
+
+/* free symbol table */
+static void
+freesymtab(Symbol **symtab)
+{
+	Symbol *tmp, *p;
+
+	p = *symtab;
+	while (p) {
+		tmp = p;
+		p = p->next;
+		if (DEBUG)
+			fprintf(stderr, "FREED SYMBOL: %s\n", tmp->name);
+		free(tmp);
+	}
+	*symtab = NULL;
+}
+
+/* free name table */
+static void
+freenametab(Name **nametab)
+{
+	Name *tmp, *p;
+
+	p = *nametab;
+	while (p) {
+		tmp = p;
+		p = p->next;
+		if (DEBUG)
+			fprintf(stderr, "FREED NAME: %s\n", tmp->s);
+		if (tmp->type == FUNCTION || tmp->type == PROCEDURE)
+			freenametab(&(tmp->u.fun->params));
+		free(tmp->s);
+		free(tmp);
+	}
+	*nametab = NULL;
+}
+
 /* check return from strdup */
 static char *
 estrdup(const char *s)
@@ -205,42 +251,135 @@ estrdup(const char *s)
 	return p;
 }
 
-/* find s in symtab; if using global symbol table, call with symtab = NULL */
-Symbol *
-lookup(Symbol *symtab, const char *s)
+/* allocate symbol */
+static Symbol *
+eallocsym(char *s)
 {
 	Symbol *sym;
 
-	if (symtab == NULL)
-		symtab = global;
+	sym = emalloc(sizeof *sym);
+	sym->name = s;
+	sym->isstr = 0;
+	sym->u.val = 0.0;
+	return sym;
+}
+
+/* get name as instruction argument from prog.pc; and increment pc */
+static Name *
+getnamearg(void)
+{
+	Name *name;
+
+	name = prog.pc->u.name;
+	prog.pc = prog.pc->next;
+	return name;
+}
+
+/* get integer as instruction argument from prog.pc; and increment pc */
+static int
+getintarg(void)
+{
+	int n;
+
+	n = prog.pc->u.narg;
+	prog.pc = prog.pc->next;
+	return n;
+}
+
+/* get floating point as instruction argument from prog.pc; and increment pc */
+static double
+getvalarg(void)
+{
+	double v;
+
+	v = prog.pc->u.val;
+	prog.pc = prog.pc->next;
+	return v;
+}
+
+/* get string as instruction argument from prog.pc; and increment pc */
+static String *
+getstrarg(void)
+{
+	String *str;
+
+	str = prog.pc->u.str;
+	prog.pc = prog.pc->next;
+	return str;
+}
+
+/* find s in symtab */
+static Symbol *
+lookupsym(Symbol *symtab, const char *s)
+{
+	Symbol *sym;
+
 	for (sym = symtab; sym; sym = sym->next)
 		if (strcmp(sym->name, s) == 0)
 			return sym;
 	return NULL;
 }
 
-/* install s into *symtab; if using global symbol table, call with symtab = NULL */
-Symbol *
-install(Symbol **symtab, const char *s, int t)
+/* install s into global symbol table */
+static Symbol *
+installglobalsym(char *s)
 {
-	Symbol *sym, *next;
+	Symbol *sym;
 
-	if (symtab == NULL) {           /* we are using the global symbol table */
-		symtab = &global;
-		next = global;
-	} else if (*symtab == NULL) {   /* we are using an empty local symbol table */
-		next = global;
-	} else {                        /* we are using a non-empty local symbol table */
-		next = *symtab;
-	}
-	sym = emalloc(sizeof *sym);
-	sym->name = estrdup(s);
-	sym->type = t;
-	sym->isstr = 0;
-	sym->u.val = 0.0;
-	sym->next = next;
-	*symtab = sym;
+	sym = eallocsym(s);
+	sym->next = global;
+	global = sym;
 	return sym;
+}
+
+/* install s into local symbol table */
+static Symbol *
+installlocalsym(char *s, Symbol *local)
+{
+	Symbol *sym;
+
+	sym = eallocsym(s);
+	sym->next = local;
+	return sym;
+}
+
+/* find name in global name table */
+Name *
+lookupname(const char *s)
+{
+	Name *name;
+
+	for (name = nametab; name; name = name->next)
+		if (strcmp(name->s, s) == 0)
+			return name;
+	return NULL;
+}
+
+/* instal name into global name table */
+Name *
+installglobalname(const char *s, int t)
+{
+	Name *name;
+
+	name = emalloc(sizeof *name);
+	name->s = estrdup(s);
+	name->type = t;
+	name->next = nametab;
+	nametab = name;
+	return name;
+}
+
+/* install name into local name table; all local names are of type VAR */
+Name *
+installlocalname(const char *s, Name *tab)
+{
+	Name *name;
+
+	name = emalloc(sizeof *name);
+	name->s = estrdup(s);
+	name->type = VAR;
+	name->next = tab;
+	return name;
 }
 
 /* add str to String list */
@@ -289,28 +428,29 @@ oprname(void (*opr)(void))
 void
 init(void)
 {
-	Symbol *sym;
+	Name *name;
 	int i;
 
 	/* initialize program memory */
 	prog.head = emalloc(sizeof *prog.head);
 	prog.head->next = NULL;
-	prog.progbase = prog.progp = prog.head;
+	prog.base = prog.progp = prog.head;
 
 	/* initialize frame stack */
 	frame.head = emalloc(sizeof *frame.head);
 	frame.head->next = NULL;
-	frame.fp = frame.head;
+	frame.head->prev = NULL;
+	frame.next = frame.head;
 
 	/* initialize random function */
 	srand(time(NULL));
 
 	/* initialize symbol table with keyword and builtin names */
 	for (i = 0; keywords[i].s; i++)
-		install(NULL, keywords[i].s, keywords[i].v);
+		installglobalname(keywords[i].s, keywords[i].v);
 	for (i = 0; bltins[i].s; i++) {
-		sym = install(NULL, bltins[i].s, BLTIN);
-		sym->u.bltin = i;
+		name = installglobalname(bltins[i].s, BLTIN);
+		name->u.bltin = i;
 	}
 }
 
@@ -318,21 +458,30 @@ init(void)
 void
 prepare(void)
 {
+	Frame *fp;
+
 	continuing = breaking = returning = 0;
 	prog.tail = NULL;
-	prog.progp = prog.progbase;
-	FREESTRINGS(autostrings)
-	FREESTACK()
+	prog.progp = prog.base;
+	currsymtab = NULL;
+	for (fp = frame.head; fp && fp != frame.tail; fp = fp->next)
+		if (fp->local)
+			freesymtab(&(fp->local));
+	frame.tail = frame.next = frame.head;
+	frame.curr = NULL;
+	freestrings(&autostrings);
+	freestack();
 }
 
 /* clean up machine */
 void
 cleanup(void)
 {
-	FREESYMTAB(global)
-	FREESTRINGS(autostrings)
-	FREESTRINGS(finalstrings)
-	FREESTACK()
+	freesymtab(&global);
+	freestrings(&autostrings);
+	freestrings(&finalstrings);
+	freenametab(&nametab);
+	freestack();
 }
 
 /* debug the machine */
@@ -342,8 +491,8 @@ debug(void)
 	Inst *p;
 	size_t n;
 
-	for (n = 0, p = prog.head; p && p != prog.progp; n++, p = p->next) {
-		fprintf(stderr, "%03zu: ", n);
+	for (n = 0, p = prog.base; p && p != prog.progp; n++, p = p->next) {
+		fprintf(stderr, "CODE %03zu: ", n);
 		switch (p->type) {
 		case NARG:
 			fprintf(stderr, "NARG %d", p->u.narg);
@@ -351,8 +500,8 @@ debug(void)
 		case VAL:
 			fprintf(stderr, "VAL  %.8g", p->u.val);
 			break;
-		case SYM:
-			fprintf(stderr, "SYM  %s", p->u.sym->name);
+		case NAME:
+			fprintf(stderr, "SYM  %s", p->u.name->s);
 			break;
 		case OPR:
 			fprintf(stderr, "OPR  %s", oprname(p->u.opr));
@@ -378,7 +527,7 @@ execute(Inst *ip)
 	Inst *opc;
 
 	if (ip == NULL)
-		prog.pc = prog.head;
+		prog.pc = prog.base;
 	else
 		prog.pc = ip;
 	while (prog.pc->u.opr && !breaking && !continuing) {
@@ -454,9 +603,8 @@ constpush(void)
 {
 	Datum d;
 
-	d.u.val = prog.pc->u.val;
+	d.u.val = getvalarg();
 	d.isstr = 0;
-	prog.pc = prog.pc->next;
 	push(d);
 }
 
@@ -473,20 +621,8 @@ strpush(void)
 {
 	Datum d;
 
-	d.u.str = prog.pc->u.str;
+	d.u.str = getstrarg();
 	d.isstr = 1;
-	prog.pc = prog.pc->next;
-	push(d);
-}
-
-/* push symbol onto stack */
-void
-sympush(void)
-{
-	Datum d;
-
-	d.u.sym = prog.pc->u.sym;
-	prog.pc = prog.pc->next;
 	push(d);
 }
 
@@ -511,7 +647,7 @@ dfree(String *str)
 }
 
 /* move string from autostrings to finalstrings */
-static void
+void
 movstr(String *str)
 {
 	if (str->isfinal) {
@@ -535,23 +671,15 @@ movstr(String *str)
 
 /* pop numeric value from stack */
 static Datum
-popnum(int issym)
+popnum(void)
 {
 	Datum d;
 	double v;
 
 	d = pop();
-	if (issym) {
-		if (d.u.sym->isstr) {
-			v = atof(d.u.sym->u.str->s);
-			d.u.sym->u.val = v;
-		}
-		d.u.sym->isstr = 0;
-	} else {
-		if (d.isstr) {
-			v = atof(d.u.str->s);
-			d.u.val = v;
-		}
+	if (d.isstr) {
+		v = atof(d.u.str->s);
+		d.u.val = v;
 	}
 	d.isstr = 0;
 	return d;
@@ -563,8 +691,8 @@ add(void)
 {
 	Datum d1, d2;
 
-	d2 = popnum(0);
-	d1 = popnum(0);
+	d2 = popnum();
+	d1 = popnum();
 	d1.u.val += d2.u.val;
 	push(d1);
 }
@@ -575,8 +703,8 @@ sub(void)
 {
 	Datum d1, d2;
 
-	d2 = popnum(0);
-	d1 = popnum(0);
+	d2 = popnum();
+	d1 = popnum();
 	d1.u.val -= d2.u.val;
 	push(d1);
 }
@@ -587,8 +715,8 @@ mul(void)
 {
 	Datum d1, d2;
 
-	d2 = popnum(0);
-	d1 = popnum(0);
+	d2 = popnum();
+	d1 = popnum();
 	d1.u.val *= d2.u.val;
 	push(d1);
 }
@@ -599,10 +727,10 @@ divd(void)
 {
 	Datum d1, d2;
 
-	d2 = popnum(0);
+	d2 = popnum();
 	if (d2.u.val == 0.0)
 		yyerror("division by zero");
-	d1 = popnum(0);
+	d1 = popnum();
 	d1.u.val /= d2.u.val;
 	push(d1);
 }
@@ -613,10 +741,10 @@ mod(void)
 {
 	Datum d1, d2;
 
-	d2 = popnum(0);
+	d2 = popnum();
 	if (d2.u.val == 0.0)
 		yyerror("module by zero");
-	d1 = popnum(0);
+	d1 = popnum();
 	d1.u.val = fmod(d1.u.val, d2.u.val);
 	push(d1);
 }
@@ -627,7 +755,7 @@ negate(void)
 {
 	Datum d;
 
-	d = popnum(0);
+	d = popnum();
 	d.u.val = -d.u.val;
 	push(d);
 }
@@ -638,63 +766,72 @@ power(void)
 {
 	Datum d1, d2;
 
-	d2 = popnum(0);
-	d1 = popnum(0);
+	d2 = popnum();
+	d1 = popnum();
 	d1.u.val = pow(d1.u.val, d2.u.val);
 	push(d1);
-}
-
-/* verify whether symbol is valid variable for evaluation */
-static void
-verifyeval(Symbol *s)
-{
-	if (s->type != VAR && s->type != UNDEF)
-		yyerror("attempt to evaluate non-variable: %s", s->name);
-	if (s->type == UNDEF)
-		yyerror("undefined variable: %s", s->name);
 }
 
 /* evaluate variable on stack */
 void
 eval(void)
 {
+	Symbol *sym = NULL;
+	Name *name;
 	Datum d;
 
-	d = pop();
-	verifyeval(d.u.sym);
-	d.isstr = d.u.sym->isstr;
-	d.u = d.u.sym->u;
+	name = getnamearg();
+	if ((sym = lookupsym(currsymtab, name->s)) == NULL)
+		if ((sym = lookupsym(global, name->s)) == NULL)
+			yyerror("could not find variable %s", name->s);
+	d.isstr = sym->isstr;
+	d.u = sym->u;
 	push(d);
 }
 
-/* get sym from pc and cast it into a number; and increment pc */
-static Datum
-dsymnum(void)
+/* verify whether name is assignable and undefined */
+static void
+verifyassign(Name *name, int undef)
 {
-	Datum d;
+	if (undef && name->type == UNDEF)
+		yyerror("undefined variable: %s", name->s);
+	if (name->type != VAR && name->type != UNDEF)
+		yyerror("assignment to non-variable: %s", name->s);
+}
+
+/* get symbol from name for assignment; and convert to number if convtonum != 0 */
+static Symbol *
+getassign(int convtonum)
+{
+	Name *name;
+	Symbol *sym;
 	double v;
 
-	d.u.sym = prog.pc->u.sym;
-	prog.pc = prog.pc->next;
-	if (d.u.sym->isstr) {
-		v = atof(d.u.sym->u.str->s);
-		dfree(d.u.sym->u.str);
-		d.u.sym->u.val = v;
-		d.u.sym->isstr = 0;
+	name = getnamearg();
+	verifyassign(name, convtonum);
+	if ((sym = lookupsym(currsymtab, name->s)) == NULL)
+		if ((sym = lookupsym(global, name->s)) == NULL)
+			sym = installglobalsym(name->s);
+	name->type = VAR;
+	if (convtonum && sym->isstr) {
+		v = atof(sym->u.str->s);
+		dfree(sym->u.str);
+		sym->u.val = v;
+		sym->isstr = 0;
 	}
-	d.isstr = 0;
-	return d;
+	return sym;
 }
 
 /* pre-increment variable */
 void
 preinc(void)
 {
+	Symbol *sym;
 	Datum d;
 
-	d = dsymnum();
-	verifyeval(d.u.sym);
-	d.u.val = d.u.sym->u.val += 1.0;
+	sym = getassign(1);
+	d.u.val = sym->u.val += 1.0;
+	d.isstr = 0;
 	push(d);
 }
 
@@ -702,11 +839,12 @@ preinc(void)
 void
 predec(void)
 {
+	Symbol *sym;
 	Datum d;
 
-	d = dsymnum();
-	verifyeval(d.u.sym);
-	d.u.val = d.u.sym->u.val -= 1.0;
+	sym = getassign(1);
+	d.u.val = sym->u.val -= 1.0;
+	d.isstr = 0;
 	push(d);
 }
 
@@ -714,14 +852,13 @@ predec(void)
 void
 postinc(void)
 {
+	Symbol *sym;
 	Datum d;
-	double v;
 
-	d = dsymnum();
-	verifyeval(d.u.sym);
-	v = d.u.sym->u.val;
-	d.u.sym->u.val += 1.0;
-	d.u.val = v;
+	sym = getassign(1);
+	d.u.val = sym->u.val;
+	d.isstr = 0;
+	sym->u.val += 1.0;
 	push(d);
 }
 
@@ -729,115 +866,99 @@ postinc(void)
 void
 postdec(void)
 {
+	Symbol *sym;
 	Datum d;
-	double v;
 
-	d = dsymnum();
-	verifyeval(d.u.sym);
-	v = d.u.sym->u.val;
-	d.u.sym->u.val -= 1.0;
-	d.u.val = v;
+	sym = getassign(1);
+	d.u.val = sym->u.val;
+	d.isstr = 0;
+	sym->u.val -= 1.0;
 	push(d);
-}
-
-static void
-verifyassign(Symbol *s)
-{
-	if (s->type != VAR && s->type != UNDEF)
-		yyerror("assignment to non-variable: %s", s->name);
 }
 
 /* assign top value to next value */
 void
 assign(void)
 {
-	Datum d1, d2;
+	Datum d;
+	Symbol *sym;
 
-	d1 = pop();
-	d2 = pop();
-	verifyassign(d1.u.sym);
-	if (d1.u.sym->isstr)
-		dfree(d1.u.sym->u.str);
-	d1.u.sym->isstr = d2.isstr;
-	if (d2.isstr)
-		movstr(d2.u.str);
-	d1.u.sym->u = d2.u;
-	d1.u.sym->isstr = d2.isstr;
-	d1.u.sym->type = VAR;
-	push(d2);
+	d = pop();
+	sym = getassign(0);
+	if (sym->isstr)
+		dfree(sym->u.str);
+	if (d.isstr)
+		movstr(d.u.str);
+	sym->u = d.u;
+	sym->isstr = d.isstr;
+	push(d);
 }
 
 /* add and assign top value to next value */
 void
 addeq(void)
 {
-	Datum d1, d2;
+	Symbol *sym;
+	Datum d;
 
-	d1 = popnum(1);
-	d2 = popnum(0);
-	verifyassign(d1.u.sym);
-	d2.u.val = d1.u.sym->u.val += d2.u.val;
-	d1.u.sym->type = VAR;
-	push(d2);
+	d = popnum();
+	sym = getassign(1);
+	d.u.val = sym->u.val += d.u.val;
+	push(d);
 }
 
 /* subtract and assign top value to next value */
 void
 subeq(void)
 {
-	Datum d1, d2;
+	Symbol *sym;
+	Datum d;
 
-	d1 = popnum(1);
-	d2 = popnum(0);
-	verifyassign(d1.u.sym);
-	d2.u.val = d1.u.sym->u.val -= d2.u.val;
-	d1.u.sym->type = VAR;
-	push(d2);
+	d = popnum();
+	sym = getassign(1);
+	d.u.val = sym->u.val -= d.u.val;
+	push(d);
 }
 
 /* multiply and assign top value to next value */
 void
 muleq(void)
 {
-	Datum d1, d2;
+	Symbol *sym;
+	Datum d;
 
-	d1 = popnum(1);
-	d2 = popnum(0);
-	verifyassign(d1.u.sym);
-	d2.u.val = d1.u.sym->u.val *= d2.u.val;
-	d1.u.sym->type = VAR;
-	push(d2);
+	d = popnum();
+	sym = getassign(1);
+	d.u.val = sym->u.val *= d.u.val;
+	push(d);
 }
 
 /* divide and assign top value to next value */
 void
 diveq(void)
 {
-	Datum d1, d2;
+	Symbol *sym;
+	Datum d;
 
-	d1 = popnum(1);
-	d2 = popnum(0);
-	verifyassign(d1.u.sym);
-	d2.u.val = d1.u.sym->u.val /= d2.u.val;
-	d1.u.sym->type = VAR;
-	push(d2);
+	d = popnum();
+	sym = getassign(1);
+	d.u.val = sym->u.val /= d.u.val;
+	push(d);
 }
 
 /* compute module and assign top value to next value */
 void
 modeq(void)
 {
-	Datum d1, d2;
-	long n;
+	Symbol *sym;
+	Datum d;
+	double v;
 
-	d1 = popnum(1);
-	d2 = popnum(0);
-	verifyassign(d1.u.sym);
-	n = d1.u.sym->u.val;
-	n %= (long)d2.u.val;
-	d2.u.val = d1.u.sym->u.val = n;
-	d1.u.sym->type = VAR;
-	push(d2);
+	d = popnum();
+	sym = getassign(1);
+	v = fmod(sym->u.val, d.u.val);
+	d.u.val = sym->u.val = v;
+	push(d);
 }
 
 /* print content of datum */
@@ -885,8 +1006,7 @@ poplist(void)
 	Datum *tmp = NULL, *beg = NULL;
 	int narg;
 
-	narg = prog.pc->u.narg;
-	prog.pc = prog.pc->next;
+	narg = getintarg();
 	while (narg-- > 0) {
 		if (stack == NULL) {
 			freelist(beg);
@@ -1082,8 +1202,7 @@ readnum(void)
 	Symbol *sym;
 	double v;
 
-	sym = prog.pc->u.sym;
-	prog.pc = prog.pc->next;
+	sym = getassign(0);
 	switch (scanf("%lf", &v)) {
 	case EOF:
 		d.u.val = 0.0;
@@ -1095,7 +1214,6 @@ readnum(void)
 		d.u.val = 1.0;
 		sym->isstr = 0;
 		sym->u.val = v;
-		sym->type = VAR;
 		break;
 	}
 	d.isstr = 0;
@@ -1111,15 +1229,13 @@ readline(void)
 	char buf[BUFSIZ];
 	char *s;
 
-	sym = prog.pc->u.sym;
-	prog.pc = prog.pc->next;
+	sym = getassign(0);
 	if (fgets(buf, sizeof buf, stdin)) {
 		d.u.val = 1.0;
 		if ((s = strdup(buf)) == NULL)
 			yyerror("out of memory");
 		sym->isstr = 1;
 		sym->u.str = addstr(s, 1);
-		sym->type = VAR;
 	} else {
 		d.u.val = 0.0;
 	}
@@ -1132,8 +1248,8 @@ gt(void)
 {
 	Datum d1, d2;
 
-	d2 = popnum(0);
-	d1 = popnum(0);
+	d2 = popnum();
+	d1 = popnum();
 	d1.u.val = (double)(d1.u.val > d2.u.val);
 	push(d1);
 }
@@ -1143,8 +1259,8 @@ ge(void)
 {
 	Datum d1, d2;
 
-	d2 = popnum(0);
-	d1 = popnum(0);
+	d2 = popnum();
+	d1 = popnum();
 	d1.u.val = (double)(d1.u.val >= d2.u.val);
 	push(d1);
 }
@@ -1154,8 +1270,8 @@ lt(void)
 {
 	Datum d1, d2;
 
-	d2 = popnum(0);
-	d1 = popnum(0);
+	d2 = popnum();
+	d1 = popnum();
 	d1.u.val = (double)(d1.u.val < d2.u.val);
 	push(d1);
 }
@@ -1165,8 +1281,8 @@ le(void)
 {
 	Datum d1, d2;
 
-	d2 = popnum(0);
-	d1 = popnum(0);
+	d2 = popnum();
+	d1 = popnum();
 	d1.u.val = (double)(d1.u.val <= d2.u.val);
 	push(d1);
 }
@@ -1176,8 +1292,8 @@ eq(void)
 {
 	Datum d1, d2;
 
-	d2 = popnum(0);
-	d1 = popnum(0);
+	d2 = popnum();
+	d1 = popnum();
 	d1.u.val = (double)(d1.u.val == d2.u.val);
 	push(d1);
 }
@@ -1187,8 +1303,8 @@ ne(void)
 {
 	Datum d1, d2;
 
-	d2 = popnum(0);
-	d1 = popnum(0);
+	d2 = popnum();
+	d1 = popnum();
 	d1.u.val = (double)(d1.u.val != d2.u.val);
 	push(d1);
 }
@@ -1198,7 +1314,7 @@ not(void)
 {
 	Datum d;
 
-	d = popnum(0);
+	d = popnum();
 	d.u.val = (double)(!d.u.val);
 	push(d);
 }
@@ -1210,10 +1326,10 @@ and(void)
 	Inst *savepc;
 
 	savepc = prog.pc;
-	d = popnum(0);
+	d = popnum();
 	if (d.u.val) {
 		execute(savepc->u.ip);
-		d = popnum(0);
+		d = popnum();
 	}
 	d.u.val = d.u.val ? 1.0 : 0.0;
 	push(d);
@@ -1227,10 +1343,10 @@ or(void)
 	Inst *savepc;
 
 	savepc = prog.pc;
-	d = popnum(0);
+	d = popnum();
 	if (!d.u.val) {
 		execute(savepc->u.ip);
-		d = popnum(0);
+		d = popnum();
 	}
 	d.u.val = d.u.val ? 1.0 : 0.0;
 	push(d);
@@ -1245,7 +1361,7 @@ cond(Inst *pc)
 	if (pc == NULL)
 		return 1.0;
 	execute(pc);
-	d = popnum(0);
+	d = popnum();
 	return d.u.val;
 }
 
@@ -1256,7 +1372,7 @@ execpop(Inst *pc)
 
 	if (pc && pc->u.opr) {
 		execute(pc);
-		d = popnum(0);
+		d = popnum();
 	} else {
 		d.u.val = 0.0;
 	}
@@ -1373,18 +1489,16 @@ void
 bltin(void)
 {
 	Datum d1, d2;
-	Symbol *sym;
+	Name *name;
 	int narg, i;
 
-	sym = prog.pc->u.sym;
-	prog.pc = prog.pc->next;
-	i = sym->u.bltin;
+	name = getnamearg();
+	i = name->u.bltin;
 	if (i == 0) {   /* sprintf */
 		_sprintf();
 		return;
 	}
-	narg = prog.pc->u.narg;
-	prog.pc = prog.pc->next;
+	narg = getintarg();
 	if (narg == 0 && bltins[i].n == -1)
 		narg = -1;
 	if (narg != bltins[i].n)
@@ -1398,12 +1512,12 @@ bltin(void)
 		d1.u.val = (*bltins[i].u.f0)();
 		break;
 	case 1:
-		d1 = popnum(0);
+		d1 = popnum();
 		d1.u.val = (*bltins[i].u.f1)(d1.u.val);
 		break;
 	case 2:
-		d2 = popnum(0);
-		d1 = popnum(0);
+		d2 = popnum();
+		d1 = popnum();
 		d1.u.val = (*bltins[i].u.f2)(d1.u.val, d2.u.val);
 		break;
 	}
@@ -1412,4 +1526,111 @@ bltin(void)
 	push(d1);
 }
 
+/* check if function or procedure is definable */
+void
+verifydef(Name *name, int type)
+{
+	if (name->type != UNDEF)
+		yyerror("assigning %s to an already used name: %d",
+		        (type == FUNCTION) ? "function" : "procedure",
+		        name->type);
+	name->type = type;
+}
+
 /* put function or procedure in symbol table */
+void
+define(Name *name, Name *params)
+{
+	Function *fun;
+	int n;
+
+	if (DEBUG)
+		debug();
+	fun = emalloc(sizeof *fun);
+	fun->code = prog.base;          /* start of code */
+	prog.base = prog.progp;         /* next code starts here */
+	fun->params = params;
+	for (n = 0; params; params = params->next)
+		n++;
+	fun->nparams = n;
+	name->u.fun = fun;
+}
+
+/* call a function */
+void
+call(void)
+{
+	Symbol *local;
+	Frame *f;
+	Datum d;
+	Name *name, *tmp;
+	int nargs;
+
+	name = getnamearg();
+	if (name->type != FUNCTION && name->type != PROCEDURE)
+		yyerror("%s is not function nor procedure", name->s);
+	nargs = getintarg();
+	if (!frame.next->next) {
+		f = emalloc(sizeof *f);
+		f->next = NULL;
+		frame.next->next = f;
+	}
+	frame.curr = f = frame.next;
+	frame.tail = frame.next = frame.next->next;
+	frame.next->prev = frame.curr;
+	if (nargs > name->u.fun->nparams)
+		yyerror("function %s called with wrong number of parameters", name->s);
+	nargs = name->u.fun->nparams - nargs;
+	local = NULL;
+	for (tmp = name->u.fun->params; tmp; tmp = tmp->next) {
+		if (nargs > 0) {
+			d.u.val = 0.0;
+			d.isstr = 0;
+			nargs--;
+		} else {
+			d = pop();
+		}
+		local = installlocalsym(tmp->s, local);
+		local->u = d.u;
+		local->isstr = d.isstr;
+	}
+	f->name = name;
+	f->retsymtab = currsymtab;
+	currsymtab = f->local = local;
+	f->retpc = prog.pc;
+	execute(name->u.fun->code);
+	returning = 0;
+}
+
+/* common return from func or proc */
+static void
+ret(void)
+{
+	currsymtab = frame.curr->retsymtab;
+	prog.pc = frame.curr->retpc;
+	frame.next = frame.curr;
+	frame.curr = frame.curr->prev;
+	returning = 1;
+}
+
+/* return from a function */
+void
+funcret(void)
+{
+	Datum d;
+
+	if (frame.curr->name->type == PROCEDURE)
+		yyerror("%s (proc) returns value", frame.curr->name->s);
+	d = pop();
+	ret();
+	push(d);
+}
+
+/* return from a procedure */
+void
+procret(void)
+{
+	if (frame.curr->name->type == FUNCTION)
+		yyerror("%s (func) returns no value", frame.curr->name->s);
+	ret();
+}

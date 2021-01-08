@@ -8,11 +8,6 @@
 #define N3(p) ((p)->next->next->next)
 #define N4(p) ((p)->next->next->next->next)
 
-/* routines called by lex.o */
-String *addstr(char *, int);
-Symbol *lookup(Symbol *symtab, const char *s);
-Symbol *install(Symbol **symtab, const char *s, int t);
-
 /* routines called by main.o */
 void init(void);
 void prepare(void);
@@ -20,9 +15,18 @@ void cleanup(void);
 void debug(void);
 void execute(Inst *);
 
+/* routines called by lex.o */
+Name *lookupname(const char *s);
+Name *installglobalname(const char *s, int t);
+
 /* routines called by gramm.o */
+String *addstr(char *, int);
+Name *installlocalname(const char *s, Name *nametab);
 Inst *code(Inst inst);
 Inst *getprogp(void);
+void verifydef(Name *, int);
+void define(Name *, Name *);
+void movstr(String *str);
 
 /* instruction operation routines */
 void oprpop(void);
@@ -44,7 +48,6 @@ void preinc(void);
 void predec(void);
 void postinc(void);
 void postdec(void);
-void sympush(void);
 void constpush(void);
 void prevpush(void);
 void strpush(void);
@@ -69,3 +72,6 @@ void forcode(void);
 void breakcode(void);
 void continuecode(void);
 void bltin(void);
+void call(void);
+void procret(void);
+void funcret(void);

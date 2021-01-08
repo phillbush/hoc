@@ -1,8 +1,7 @@
                                   hoc:
                          High-Order Calculator
 
-This is an implementation of a stage-5 hoc(1).  I'm still doing changes
-and preparing stuff to make it into a stage-6 hoc.
+This is an implementation of a stage-6 hoc(1).
 
 Hoc is an interpreter for a simple language used for floating point
 arithmetic with C-like syntax.
@@ -24,7 +23,6 @@ arguments, if any, following the instruction.
 • Makefile:     The makefile.
 • code.[hc]:    Routines for executing the machine instructions.
 • error.[hc]:   Routines for error printing.
-• symbol.[hc]:  Routines for handling the symbol table.
 • main.c:       The main routine.
 • lex.l:        The lexical analyzer.
 • gramm.y:      The grammar.
@@ -45,10 +43,9 @@ shell with history support.
 • Implement a full stage-6 hoc.
 • Add a facility to execute system commands from within hoc (and assign
   their output to variables) (exercise 8-7).
-• Turn symbol table into a hash table?
 • Add string concatenation.
-• Add support for functions.
 • Add option -e to read code from command-line.
+• Clean local symbol table in ret(), prepare() and clean()
 
 
 § FEATURES
@@ -197,11 +194,21 @@ that follows the loop.  Code generated for `for` and `if` works similar.
 You can compile with -DDEBUG=1 for hoc to print the generated machine
 code after it is generated.
 
-Strings are allocated in two linked-lists of strings.  `autostrings`
-contains strings that appears during evaluation as the result of an
-expression.  Strings in `autostrings` are freed after each execution.
-`finalstrings` contain strings that are the value of a variable, and
-thus should not be freed.
+Strings used as values are allocated in two linked-lists of strings.
+`autostrings` contains strings that appears during evaluation as the
+result of an expression.  Strings in `autostrings` are freed after each
+execution.  `finalstrings` contain strings that are the value of a
+variable, and thus should not be freed.
+
+Names for variable, functions and keywords are installed in a name
+table.  There is a global name table, used for keywords, function
+names and global variable names; and a name table for each function
+definition, used for local variables.
+
+When a variable is evaluated, it is looked up in a symbol table, which
+associate names with values.  There is a global symbol table, for global
+values; and one symbol table for each function frame, containing
+automatic values.
 
 
 § SEE ALSO
