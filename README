@@ -40,9 +40,8 @@ shell with history support.
 
 § TODO
 
-• Implement a full stage-6 hoc.
 • Add a facility to execute system commands from within hoc (and assign
-  their output to variables) (exercise 8-7).
+  their return value to variables) (exercise 8-7).
 • Add interrupt handling, so that a runaway computation can be stopped
   without losing the state of variables already computed (exercise 8-16).
 • Add arrays to hoc.  Pass they by reference to function and procedures.
