@@ -1,21 +1,9 @@
                                   hoc:
                          High-Order Calculator
 
-This is an implementation of a stage-6 hoc(1).
-
-Hoc is an interpreter for a simple language used for floating point
-arithmetic with C-like syntax.
-
-Hoc compiles input into a stack machine.   As input is parsed, code
-is generated for a simple computer instead of immediately computing
-answers. Once the end of a statement is reached, the generated code
-is executed (interpreted) to compute the desired result. The simple
-computer is a ‘stack machine’: when an operand is encountered, it's
-pushed onto a stack  (more precisely,  code is generated to push it
-onto a stack).  Stack machines usually result in simple interpreters
-(it's just an array containing operators and operands).  The operators
-are the machine instructions; each is a function call with its
-arguments, if any, following the instruction.
+This is an implementation of a stage-6 hoc(1) with added features.
+Hoc (High-Order Calculator) is an interpreter for a simple language
+used for floating point arithmetic with C-like syntax.
 
 § FILES
 
@@ -30,9 +18,9 @@ arguments, if any, following the instruction.
 
 § USAGE
 
-	$ hoc [file]
+	$ hoc [file [arguments ...]]
 
-Hoc read the file given as argument and interpret it.  If no file is
+Hoc reads the file given as argument and interpret it.  If no file is
 given, or if file is “-”, hoc interprets the standard input; in this
 case, I recommend running hoc with rlwrap(1), for a better interactive
 shell with history support.
@@ -72,7 +60,7 @@ nullary built-in functions.  So, instead of using `PI`, you must use
 assignment to constants.
 
 Exercise 8-6 (n-ary functions).
-This version of hoc(1) support built-in functions with variable arity.
+This version of hoc(1) supports built-in functions with variable arity.
 It also has the built-in function rand(), which returns a floating point
 random variable uniformly distributed on the interval (0,1).
 
@@ -128,7 +116,7 @@ The value of a expression list is that of the rightmost expression.
 print, printf and sprintf().
 The `print` statement in this version of hoc actually works like
 awk(1)'s `print` statement (separates each argument with a space,
-and prints a newline at the end).  As awk(1), this tersion of hoc(1)
+and prints a newline at the end).  As awk(1), this version of hoc(1)
 also has a `printf` statement and a `sprintf()` built-in function.
 
 getline
@@ -158,6 +146,17 @@ Use cat(1).
 
 
 § HOW IT WORKS
+
+Hoc compiles input into a stack machine.   As input is parsed, code
+is generated for a simple computer instead of immediately computing
+answers. Once the end of a statement is reached, the generated code
+is executed (interpreted) to compute the desired result. The simple
+computer is a ‘stack machine’: when an operand is encountered, it's
+pushed onto a stack  (more precisely,  code is generated to push it
+onto a stack).  Stack machines usually result in simple interpreters
+(it's just an array containing operators and operands).  The operators
+are the machine instructions; each is a function call with its
+arguments, if any, following the instruction.
 
 Before parsing and execution begins, the machine is initialized and the
 symbol table is populated by init().  Calls to the function install()
