@@ -50,7 +50,6 @@ shell with history support.
 • Add option -e to read code from command-line.
 • Read environment variables by a getenv() built-in function.
 • Access command-line arguments with special $1, $2, $3, etc variables.
-• Add do-while statements.
 
 
 § FEATURES
@@ -135,6 +134,9 @@ also has a `printf` statement and a `sprintf()` built-in function.
 
 getline
 The `getline VAR` expression reads a line into the variable VAR.
+
+do-while.
+This version of hoc(1) supports do-while statements.
 
 
 § NON-FEATURES

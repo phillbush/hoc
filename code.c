@@ -27,6 +27,7 @@ static struct {
 	{"read",        READ},
 	{"getline",     GETLINE},
 	{"if",          IF},
+	{"do",          DO},
 	{"else",        ELSE},
 	{"while",       WHILE},
 	{"for",         FOR},
@@ -78,6 +79,7 @@ static struct {
 	{"and",          and},
 	{"or",           or},
 	{"not",          not},
+	{"docode",       docode},
 	{"ifcode",       ifcode},
 	{"whilecode",    whilecode},
 	{"forcode",      forcode},
@@ -1393,6 +1395,30 @@ ifcode(void)
 		execute(N1(savepc)->u.ip);
 	if (!returning)
 		prog.pc = N2(savepc)->u.ip;     /* next statement */
+}
+
+void
+docode(void)
+{
+	Inst *savepc;
+
+	savepc = prog.pc;
+	do {
+		execute(N2(savepc));
+		if (returning) {
+			break;
+		}
+		if (continuing) {
+			continuing = 0;
+			continue;
+		}
+		if (breaking) {
+			breaking = 0;
+			break;
+		}
+	} while (cond(savepc->u.ip));
+	if (!returning)
+		prog.pc = N1(savepc)->u.ip;
 }
 
 void

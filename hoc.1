@@ -252,6 +252,11 @@ A continue statement may appear only within a loop statement
 and causes control to pass to the loop-continuation portion
 of the innermost enclosing loop statement.
 .TP
+.B do STMT while (EXPR)
+A do-while statement is a loop statement
+that runs STMT first,
+and then passes control to STMT repeatedly so long as EXPR evaluates to nonzero (true).
+.TP
 .B for (EXPR1; EXPR2; EXPR3) STMT
 A for statement is a loop statement that evaluates EXPR1,
 and then passes control to STMT repeatedly so long as EXPR2 evaluates to nonzero (true);
@@ -427,6 +432,8 @@ Local variables (the same way
 does).
 .IP \(bu 2
 The print and printf statements; and the sprintf built-in function.
+.IP \(bu 2
+Do-while statements.
 .IP \(bu 2
 Support for comments.
 .IP \(bu 2

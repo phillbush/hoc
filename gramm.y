@@ -47,12 +47,12 @@ int yylex(void);
 %token <val>  NUMBER PREVIOUS
 %token <name> VAR BLTIN UNDEF
 %token <name> PRINT PRINTF READ GETLINE
-%token <name> WHILE IF ELSE FOR BREAK CONTINUE
+%token <name> WHILE DO IF ELSE FOR BREAK CONTINUE
 %token <name> FUNC PROC FUNCTION PROCEDURE RETURN
 %type  <name> params paramlist
 %type  <narg> args arglist
 %type  <inst> expr exprlist stmt stmtlist stmtnl asgn
-%type  <inst> and or while if cond forcond forloop begin end
+%type  <inst> and or do while if cond forcond forloop begin end
 %type  <name> procname
 %left  ','
 %right '=' ADDEQ SUBEQ MULEQ DIVEQ MODEQ
@@ -106,9 +106,10 @@ stmt:
 	| PRINT begin arglist                   { $$ = $2; oprcode(_print); argcode($3); }
 	| PRINTF begin arglist                  { $$ = $2; oprcode(_printf); argcode($3); }
 	| exprlist                              { oprcode(oprpop); }
-	| if cond stmtnl end                      { fill3($1, $3, NULL, $4); }
-	| if cond stmtnl end ELSE stmtnl end        { fill3($1, $3, $6, $7); }
-	| while cond stmtnl end                   { fill2($1, $3, $4); inloop--; }
+	| if cond stmtnl end                    { fill3($1, $3, NULL, $4); }
+	| if cond stmtnl end ELSE stmtnl end    { fill3($1, $3, $6, $7); }
+	| while cond stmtnl end                 { fill2($1, $3, $4); inloop--; }
+	| do stmtnl WHILE cond end              { fill2($1, $4, $5); inloop--; }
 	| forloop '(' forcond ';' forcond ';' forcond ')' stmtnl end { fill4($1, $5, $7, $9, $10); inloop--; }
 	// | ';'           { $$ = oprcode(NULL); }         /* null statement */
 	;
@@ -193,6 +194,10 @@ cond:
 
 if:
 	  IF    { $$ = oprcode(ifcode); oprcode(NULL); oprcode(NULL); oprcode(NULL); }
+	;
+
+do:
+	  DO    { $$ = oprcode(docode); oprcode(NULL); oprcode(NULL); inloop++; }
 	;
 
 while:

@@ -67,6 +67,7 @@ void and(void);
 void or(void);
 void not(void);
 void ifcode(void);
+void docode(void);
 void whilecode(void);
 void forcode(void);
 void breakcode(void);
