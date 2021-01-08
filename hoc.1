@@ -217,10 +217,11 @@ Read a number from the stadard input into the variable VAR.
 .B getline VAR
 Read a string from the stadard input into the variable VAR.
 .SS Statements
-A statement can be an expression, a compound statement, a print statement,
+A statement can be an expression, a compound statement, a print statement, a procedure call,
 a printf statement, a control flow statement, or a procedure or function definition statement.
 A statement must be terminated by a newline or a semi-colon.
 A compound statement is a list of statements enclosed in curly braces (this list can be empty).
+A procedure call is like a function call, but for procedures.
 .PP
 A print statement consists of the word
 .B print
@@ -290,6 +291,8 @@ although they are defined by the same mechanism.
 This distinction is simply for run-time error checking:
 it is an error for a procedure to return a value, and for a function not to return one.
 A function or procedure definition must not occur inside another statement.
+Function calls are expressions;
+procedure calls are statements;
 .PP
 The syntax of function and procedure definitions is explained below.
 .TP
@@ -416,6 +419,14 @@ The
 and
 .B continue
 control\-flow statements.
+.IP \(bu 2
+Named formal parameters instead of $1, etc.
+.IP \(bu 2
+Local variables (the same way
+.IR awk (1)
+does).
+.IP \(bu 2
+The print and printf statements; and the sprintf built-in function.
 .IP \(bu 2
 Support for comments.
 .IP \(bu 2

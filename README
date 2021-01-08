@@ -43,9 +43,15 @@ shell with history support.
 • Implement a full stage-6 hoc.
 • Add a facility to execute system commands from within hoc (and assign
   their output to variables) (exercise 8-7).
+• Add interrupt handling, so that a runaway computation can be stopped
+  without losing the state of variables already computed (exercise 8-16).
+• Add arrays to hoc.  Pass they by reference to function and procedures.
+  Return a pointer to them (exercise 8-20).
 • Add string concatenation.
 • Add option -e to read code from command-line.
-• Clean local symbol table in ret(), prepare() and clean()
+• Read environment variables by a getenv() built-in function.
+• Access command-line arguments with special $1, $2, $3, etc variables.
+• Add do-while statements.
 
 
 § FEATURES
@@ -77,9 +83,6 @@ Exercise 8-8 (table of built-in functions).
 This version of hoc(1) uses a table instead of a set of essentially
 identical functions for implementing the built-in functions.
 
-Exercise 8-9 (lex).
-This version of hoc(1) uses lex(1) for implementing the lexical analyzer.
-
 Exercise 8-10 (dynamic machine).
 The sizes of `stack` and `prog` are dynamic, so hoc never runs out of
 space as memory can be obtained by calling malloc(3).
@@ -102,6 +105,23 @@ in an infinite loop.
 
 Exercise 8-15 (comments).
 This version of hoc(1) supports comments beginnign with “#”.
+
+Exercise 8-18 (named formal parameters).
+This version of hoc(1) supports named formal parameters in subroutines
+as an alternative to $1, etc.
+
+Exercise 8-19 (local variables).
+This version of hoc(1) supports local variables by the same inelegant
+way that awk(1) does.
+
+Exercise 8-21 (string handling).
+This version of hoc(1) supports generalized string handling, so that
+variables can hold strings instead of numbers.  (I have to add a
+concatenation operand though).  It also has facilities for output
+formatting (the printf statement).
+
+Lex.
+This version of hoc(1) uses lex(1) for implementing the lexical analyzer.
 
 Expression list.
 This version of hoc(1) supports list of expressions separated by comma,
@@ -199,6 +219,11 @@ Strings used as values are allocated in two linked-lists of strings.
 result of an expression.  Strings in `autostrings` are freed after each
 execution.  `finalstrings` contain strings that are the value of a
 variable, and thus should not be freed.
+
+Different from the book, where symbols are used for variables, keywords,
+built-in functions, etc, in this implementation there is two different
+structures, Name and Symbol.  The first is looked up while the input is
+being read, while Symbols are looked up during execution.
 
 Names for variable, functions and keywords are installed in a name
 table.  There is a global name table, used for keywords, function
