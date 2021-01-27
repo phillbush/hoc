@@ -24,7 +24,7 @@ static int makestr(char *yytext);
 
 %%
 
-[ \t]                           { ; }
+[ \t]|\\\n                      { ; }
 ({D}+\.?|{D}*\.{D}+){E}?        { return makenum(yytext); }
 {L}{A}*                         { return makenam(yytext); }
 \"([^"\\\n]|{ES})*\"            { return makestr(yytext); }

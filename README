@@ -130,6 +130,10 @@ This version of hoc(1) can access command-line arguments with the '$'
 operator.  $1 is the first command-line argument, $2 is the second,
 and so on.  $0 is the name of the input file.
 
+Escape line break.
+This version of hoc(1) can escape new lines by ending a line with a
+backslash (\).
+
 
 § NON-FEATURES
 

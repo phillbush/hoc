@@ -166,6 +166,14 @@ operators listed together have the same precedence.
 All operators expect a numeric value and will convert strings to numbers as needed.
 All operators are binary and associate from left to right, unless explicitly stated otherwise.
 .TP
+.B $
+(unary, right associative)
+Access command-line arguments.
+$1 is the first command-line argument, $2 is the second, and so on.
+$0 is the name of the input file.
+If a value greater than the number of command-line argument is used,
+returns 0.0 instead.
+.TP
 .B ^
 (right associative)
 Exponentiation.
@@ -174,14 +182,6 @@ Exponentiation.
 (unary, right associative)
 Logical negation, unary minus, unary plus, decrement operator, and increment operator.
 The decrement and increment operators have the prefix and postfix form.
-.TP
-.B $
-(unary, right associative)
-Access command-line arguments.
-$1 is the first command-line argument, $2 is the second, and so on.
-$0 is the name of the input file.
-If a value greater than the number of command-line argument is used,
-returns 0.0 instead.
 .TP
 .B * / %
 Multiplication, division, and modulus.
@@ -367,7 +367,7 @@ func gcd(a, b, tmp) {
 	return gcd(b, tmp)
 }
 for (i = 1; i < 12; i++)
-	printf "gcd(%d, 12) = %d\n", i, gcd(i, 12)
+	printf \(dqgcd(%d, 12) = %d\en\(dq, i, gcd(i, 12)
 .EE
 .PP
 The following is the output the program above.

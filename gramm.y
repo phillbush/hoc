@@ -62,9 +62,9 @@ int yylex(void);
 %left  GT GE LT LE
 %left  '+' '-'
 %left  '*' '/' '%'
-%right '$'
 %right UNARYSIGN NOT INC DEC
 %right '^'
+%right '$'
 
 %%
 
@@ -152,9 +152,9 @@ expr:
 
 defn:
 	  FUNC procname                 { indef = 1; verifydef($2, FUNCTION); }
-	  '(' paramlist ')' stmtnl        { oprcode(procret); define($2, $5); indef = 0; }
+	  '(' paramlist ')' stmtnl      { oprcode(procret); define($2, $5); indef = 0; }
 	| PROC procname                 { indef = 1; verifydef($2, PROCEDURE); }
-	  '(' paramlist ')' stmtnl        { oprcode(procret); define($2, $5); indef = 0; }
+	  '(' paramlist ')' stmtnl      { oprcode(procret); define($2, $5); indef = 0; }
 	;
 
 procname:
