@@ -33,6 +33,11 @@
 	N4((x))->u.ip = (d)
 
 int yylex(void);
+static void looponly(const char *);
+static void defnonly(void);
+
+static int indef;
+static size_t inloop;
 %}
 
 %union {
@@ -238,9 +243,6 @@ end:
 	;
 
 %%
-
-static int indef;
-static size_t inloop;
 
 /* error if using break/continue out of loop */
 static void
